@@ -13,6 +13,7 @@ public class TimeManager : MonoBehaviour
 
     public event System.Action<int> OnHourChanged;
     public event System.Action<int> OnNewDay;
+    public event System.Action OnNewWeek;
 
     public int CurrentHour => currentHour;
     public int CurrentDay => currentDay;
@@ -34,6 +35,8 @@ public class TimeManager : MonoBehaviour
                 currentDay += 1;
                 currentHour = 0;
                 OnNewDay?.Invoke(currentDay);
+                if (currentDay % 7 == 0)
+                    OnNewWeek?.Invoke();
             }
 
             OnHourChanged?.Invoke(currentHour);

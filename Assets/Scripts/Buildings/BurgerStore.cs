@@ -6,8 +6,28 @@ public class BurgerStore : CommercialBuilding
     public int mealPrice = 10;
     public float hungerRestored = 100f;
 
+    protected override void SetupDefaultShifts()
+    {
+        // Random start between 7am and 2pm so burger stores open at different times.
+        int startHour = Random.Range(7, 15);
+        shifts.Add(new Shift
+        {
+            startHour = startHour,
+            durationHours = 8,
+            workersRequired = 1,
+            wage = 280,
+            payFrequency = PayFrequency.Weekly
+        });
+    }
+
     public override bool Interact(Agent agent)
     {
+        if (!IsOpen())
+        {
+            Debug.Log($"{agent.agentName} tried to buy food but {buildingName} is closed.");
+            return false;
+        }
+
         if (!agent.TrySpend(mealPrice))
         {
             Debug.Log($"{agent.agentName} can't afford food!");

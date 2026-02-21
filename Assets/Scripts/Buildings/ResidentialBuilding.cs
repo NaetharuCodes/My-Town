@@ -39,7 +39,7 @@ public class ResidentialBuilding : Building
             if (unit.DwellingOccupancy.Count == 0)
             {
                 unit.DwellingOccupancy.Add(agent);
-                agent.AssignHome(gridPosition);
+                agent.AssignHome(gridPosition, unit);
                 return true;
             }
         }

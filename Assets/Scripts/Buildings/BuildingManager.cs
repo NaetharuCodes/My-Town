@@ -36,15 +36,17 @@ public class BuildingManager : MonoBehaviour
         return null;
     }
 
-    public Vector3Int? FindNearest<T>(Vector3Int from) where T : Building
+    public Vector3Int? FindNearest<T>(Vector3Int from, System.Func<T, bool> filter = null) where T : Building
     {
         Vector3Int? nearest = null;
         float nearestDist = float.MaxValue;
 
         foreach (var kvp in buildings)
         {
-            if (kvp.Value is T)
+            if (kvp.Value is T building)
             {
+                if (filter != null && !filter(building)) continue;
+
                 float dist = Vector3Int.Distance(from, kvp.Key);
                 if (dist < nearestDist)
                 {

@@ -15,4 +15,7 @@ public class DwellingUnit
 
     public List<Agent> DwellingOccupancy = new List<Agent>();
 
+    // Food and goods stored at home. Stocked by grocery runs; consumed when cooking.
+    public Inventory pantry = new Inventory();
+
 }

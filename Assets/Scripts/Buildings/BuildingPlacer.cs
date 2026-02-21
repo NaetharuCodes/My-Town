@@ -12,6 +12,7 @@ public class BuildingPlacer : MonoBehaviour
     public TileBase roadTile;
     public TileBase houseTile;
     public TileBase burgerStoreTile;
+    public TileBase supermarketTile;
 
     [Header("References")]
     public BuildingManager buildingManager;
@@ -33,6 +34,8 @@ public class BuildingPlacer : MonoBehaviour
             SelectTile(houseTile, "House");
         if (Keyboard.current.digit3Key.wasPressedThisFrame)
             SelectTile(burgerStoreTile, "Burger Store");
+        if (Keyboard.current.digit4Key.wasPressedThisFrame)
+            SelectTile(supermarketTile, "Supermarket");
         if (Keyboard.current.escapeKey.wasPressedThisFrame)
             SelectTile(null, "None");
 
@@ -97,6 +100,12 @@ public class BuildingPlacer : MonoBehaviour
             BurgerStore store = new GameObject("BurgerStore").AddComponent<BurgerStore>();
             store.gridPosition = cellPos;
             buildingManager.RegisterBuilding(store);
+        }
+        else if (selectedTile == supermarketTile)
+        {
+            Supermarket market = new GameObject("Supermarket").AddComponent<Supermarket>();
+            market.gridPosition = cellPos;
+            buildingManager.RegisterBuilding(market);
         }
     }
 }
