@@ -5,6 +5,33 @@ public class ResidentialBuilding : Building
 {
     public List<DwellingUnit> DwellingUnits = new List<DwellingUnit>();
 
+    private TimeManager timeManager;
+
+    void Start()
+    {
+        timeManager = FindFirstObjectByType<TimeManager>();
+        if (timeManager != null)
+            timeManager.OnNewDay += CollectRent;
+    }
+
+    void OnDestroy()
+    {
+        if (timeManager != null)
+            timeManager.OnNewDay -= CollectRent;
+    }
+
+    void CollectRent(int day)
+    {
+        foreach (DwellingUnit unit in DwellingUnits)
+        {
+            foreach (Agent agent in unit.DwellingOccupancy)
+            {
+                agent.ChargeRent(unit.rentPerDay);
+                treasury += unit.rentPerDay;
+            }
+        }
+    }
+
     public override bool Interact(Agent agent)
     {
         foreach (DwellingUnit unit in DwellingUnits)

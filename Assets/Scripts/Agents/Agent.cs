@@ -15,6 +15,7 @@ public class Agent : MonoBehaviour
 
     [Header("Finances")]
     public int bankBalance;
+    public int dailyIncome = 70; // Placeholder until the jobs system is implemented
 
     [Header("State")]
     public AgentState currentState = AgentState.Idle;
@@ -39,6 +40,7 @@ public class Agent : MonoBehaviour
     private BuildingManager buildingManager;
     private Pathfinder pathfinder;
     private Tilemap buildingsTilemap;
+    private TimeManager timeManager;
 
     public void Initialise(AgentManager manager, Pathfinder pf, Tilemap buildings, BuildingManager bm)
     {
@@ -46,7 +48,26 @@ public class Agent : MonoBehaviour
         pathfinder = pf;
         buildingsTilemap = buildings;
         buildingManager = bm;
-        bankBalance = Random.Range(0, 500);
+        bankBalance = Random.Range(200, 500);
+    }
+
+    void Start()
+    {
+        timeManager = FindFirstObjectByType<TimeManager>();
+        if (timeManager != null)
+            timeManager.OnNewDay += ReceiveDailyIncome;
+    }
+
+    void OnDestroy()
+    {
+        if (timeManager != null)
+            timeManager.OnNewDay -= ReceiveDailyIncome;
+    }
+
+    void ReceiveDailyIncome(int day)
+    {
+        bankBalance += dailyIncome;
+        Debug.Log($"{agentName} received ${dailyIncome} income. Balance: ${bankBalance}");
     }
 
     void Update()
@@ -252,6 +273,15 @@ public class Agent : MonoBehaviour
     public void Feed(float amount)
     {
         hunger = Mathf.Max(hunger - amount, 0f);
+    }
+
+    public void ChargeRent(int amount)
+    {
+        bankBalance -= amount;
+        if (bankBalance < 0)
+            Debug.Log($"{agentName} can't afford rent! Balance: ${bankBalance}");
+        else
+            Debug.Log($"{agentName} paid ${amount} rent. Balance: ${bankBalance}");
     }
 
     public bool TrySpend(int price)

@@ -15,6 +15,7 @@ public class BurgerStore : CommercialBuilding
         }
 
         agent.Feed(hungerRestored);
+        treasury += mealPrice;
         return true;
     }
 }

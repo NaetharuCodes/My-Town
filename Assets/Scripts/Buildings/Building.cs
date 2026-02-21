@@ -17,6 +17,12 @@ public class Building : MonoBehaviour
     [Header("Pricing")]
     public int basePrice;
 
+    // Revenue collected from rent or sales. In the full version this will
+    // pay wages to employees and then flow up to the owner (chain, private
+    // individual, or municipality).
+    [Header("Finances")]
+    public int treasury = 0;
+
     [Header("Capacity")]
     public int maxOccupancy;
 

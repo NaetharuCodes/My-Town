@@ -11,6 +11,8 @@ public class DwellingUnit
 
     public int InteriorCondition;
 
+    public int rentPerDay = 40;
+
     public List<Agent> DwellingOccupancy = new List<Agent>();
 
 }
