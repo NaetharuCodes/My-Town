@@ -18,6 +18,13 @@ public class TimeManager : MonoBehaviour
     public int CurrentHour => currentHour;
     public int CurrentDay => currentDay;
 
+    public void SetTime(int day, int hour)
+    {
+        currentDay = day;
+        currentHour = hour;
+        timeAccumulator = 0f;
+    }
+
     public string TimeString => $"Day {currentDay} - {currentHour:00}:00";
 
     private void Update()

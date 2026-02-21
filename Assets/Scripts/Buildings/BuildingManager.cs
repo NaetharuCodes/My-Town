@@ -36,6 +36,14 @@ public class BuildingManager : MonoBehaviour
         return null;
     }
 
+    public System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<Vector3Int, Building>> GetAllBuildings()
+        => buildings;
+
+    public void ClearAll()
+    {
+        buildings.Clear();
+    }
+
     public Vector3Int? FindNearest<T>(Vector3Int from, System.Func<T, bool> filter = null) where T : Building
     {
         Vector3Int? nearest = null;

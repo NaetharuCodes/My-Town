@@ -47,6 +47,18 @@ public class ResidentialBuilding : Building
         return false;
     }
 
+    // Returns occupant names and pantry count for the first dwelling unit.
+    public (List<string> occupantNames, int pantryGroceries) GetSaveData()
+    {
+        if (DwellingUnits.Count == 0)
+            return (new List<string>(), 0);
+        DwellingUnit unit = DwellingUnits[0];
+        var names = new List<string>();
+        foreach (Agent a in unit.DwellingOccupancy)
+            names.Add(a.agentName);
+        return (names, unit.pantry.Get(ItemType.Groceries));
+    }
+
     public bool HasVacantUnit()
     {
         foreach (DwellingUnit unit in DwellingUnits)

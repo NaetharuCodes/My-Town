@@ -494,8 +494,8 @@ MonoBehaviour:
   houseTile: {fileID: 11400000, guid: 0d87be7c971776c4a9f5dfa5982b6de3, type: 2}
   burgerStoreTile: {fileID: 11400000, guid: 2ed8737a9ae70fa478513bf85a048205, type: 2}
   supermarketTile: {fileID: 11400000, guid: 6c8f63a6ec9c35744a502dccd221557e, type: 2}
-  officeTile: {fileID: 0}
-  parkTile: {fileID: 0}
+  officeTile: {fileID: 11400000, guid: e285d7025e369f84ba31f961c90cc58b, type: 2}
+  parkTile: {fileID: 11400000, guid: 0a2528e8f15befa4a8a7154dba5578c3, type: 2}
   buildingManager: {fileID: 892924912}
 --- !u!4 &774972512
 Transform:

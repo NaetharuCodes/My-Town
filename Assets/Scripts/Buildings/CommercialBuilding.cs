@@ -13,7 +13,7 @@ public class CommercialBuilding : Building
 
     protected TimeManager timeManager;
 
-    void Awake()
+    protected virtual void Awake()
     {
         // Populate default shifts before anything else runs.
         // Subclasses override SetupDefaultShifts() to define their roster.
@@ -21,7 +21,7 @@ public class CommercialBuilding : Building
             SetupDefaultShifts();
     }
 
-    void Start()
+    protected virtual void Start()
     {
         timeManager = FindFirstObjectByType<TimeManager>();
         if (timeManager != null)
@@ -31,7 +31,7 @@ public class CommercialBuilding : Building
         }
     }
 
-    void OnDestroy()
+    protected virtual void OnDestroy()
     {
         if (timeManager != null)
         {
@@ -142,6 +142,16 @@ public class CommercialBuilding : Building
                 Debug.Log($"{buildingName} can't afford to pay {worker.agentName}!");
             }
         }
+    }
+
+    // Returns the names of workers assigned to the first shift (for saving).
+    public List<string> GetAssignedWorkerNames()
+    {
+        var names = new List<string>();
+        if (shifts.Count > 0)
+            foreach (var worker in shifts[0].AssignedWorkers)
+                names.Add(worker.agentName);
+        return names;
     }
 
     public override bool Interact(Agent agent)

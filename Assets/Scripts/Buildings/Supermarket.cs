@@ -29,6 +29,22 @@ public class Supermarket : CommercialBuilding
             return false;
         }
 
+        // Thief trait: roll to steal instead of paying.
+        if (agent.personality.HasTrait("thief") && agent.personality.RollTrait("thief"))
+        {
+            agent.AddToInventory(ItemType.Groceries, groceriesPerPack);
+            Debug.Log($"{agent.agentName} STOLE {groceriesPerPack} groceries from {buildingName}!");
+
+            // 40% chance of being caught regardless of thief level.
+            if (Random.value < 0.4f)
+            {
+                Debug.Log($"{agent.agentName} was caught stealing! Alerting police...");
+                AlertPolice(agent);
+            }
+            return true;
+        }
+
+        // Normal purchase.
         if (!agent.TrySpend(groceryPackCost))
         {
             Debug.Log($"{agent.agentName} can't afford groceries.");
@@ -39,5 +55,16 @@ public class Supermarket : CommercialBuilding
         treasury += groceryPackCost;
         Debug.Log($"{agent.agentName} bought {groceriesPerPack} groceries. Now carrying: {agent.CarriedCount(ItemType.Groceries)}");
         return true;
+    }
+
+    void AlertPolice(Agent criminal)
+    {
+        if (criminal.isBeingChased) return; // already being pursued
+
+        PoliceStation station = FindFirstObjectByType<PoliceStation>();
+        if (station != null)
+            station.DispatchOfficer(criminal);
+        else
+            Debug.Log($"No police station in town — {criminal.agentName} gets away!");
     }
 }

@@ -7,6 +7,19 @@ public class Agent : MonoBehaviour
     [Header("Identity")]
     public string agentName;
 
+    [Header("Personality")]
+    public Personality personality = new Personality();
+    public bool isBeingChased = false;
+
+    [Header("Police Officer")]
+    public Agent chasingTarget;
+    public int officerArrestFine;
+
+    // Internal police officer state
+    private float chasePathTimer;
+    private float patrolWaitTimer;
+    private float normalMoveSpeed;
+
     [Header("Needs")]
     [Range(0f, 100f)]
     public float hunger = 0f;
@@ -131,6 +144,10 @@ public class Agent : MonoBehaviour
             case AgentState.Working:        HandleWorking();         break;
             case AgentState.AtPark:         HandleAtPark();          break;
             case AgentState.SeekingPark:    HandleSeekingPark();     break;
+            case AgentState.Fleeing:        HandleFleeing();         break;
+            case AgentState.Arrested:       /* coroutine handles release */ break;
+            case AgentState.Patrolling:     HandlePatrolling();      break;
+            case AgentState.Chasing:        HandleChasing();         break;
         }
     }
 
@@ -408,6 +425,131 @@ public class Agent : MonoBehaviour
         }
     }
 
+    void HandleFleeing()
+    {
+        // Not moving means the path finished without OnPathComplete handling it,
+        // or StartPathTo failed to find a route. Try again or confirm safe arrival.
+        if (!isMoving)
+        {
+            if (hasHome)
+            {
+                Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
+                if (currentCell == homeTile)
+                {
+                    isBeingChased = false;
+                    Debug.Log($"{agentName} made it home and evaded the police!");
+                    currentState = AgentState.Idle;
+                }
+                else
+                {
+                    StartPathTo(homeTile); // retry
+                }
+            }
+        }
+    }
+
+    void HandlePatrolling()
+    {
+        // End shift — check out and go idle like any other worker.
+        if (timeManager != null && assignedShift != null &&
+            !assignedShift.IsActiveAt(timeManager.CurrentHour))
+        {
+            employer.WorkerCheckOut(this);
+            currentState = AgentState.Idle;
+            return;
+        }
+
+        // While stationary, count down to next patrol leg.
+        if (!isMoving)
+        {
+            patrolWaitTimer -= Time.deltaTime;
+            if (patrolWaitTimer <= 0f)
+            {
+                Vector3Int dest = GetRandomPatrolPoint();
+                StartPathTo(dest);
+                patrolWaitTimer = Random.Range(8f, 20f);
+            }
+        }
+    }
+
+    void HandleChasing()
+    {
+        // Shift ended while chasing — give up and check out.
+        if (timeManager != null && assignedShift != null &&
+            !assignedShift.IsActiveAt(timeManager.CurrentHour))
+        {
+            if (chasingTarget != null) chasingTarget.isBeingChased = false;
+            EndChase();
+            employer.WorkerCheckOut(this);
+            currentState = AgentState.Idle;
+            return;
+        }
+
+        // Target gone (destroyed, or already arrested by someone else).
+        if (chasingTarget == null || chasingTarget.currentState == AgentState.Arrested)
+        {
+            EndChase();
+            return;
+        }
+
+        // Criminal made it home — give up.
+        if (chasingTarget.hasHome && chasingTarget.currentState != AgentState.Fleeing)
+        {
+            Vector3Int criminalCell = buildingsTilemap.WorldToCell(chasingTarget.transform.position);
+            if (criminalCell == chasingTarget.homeTile)
+            {
+                Debug.Log($"{agentName} lost {chasingTarget.agentName} — they made it home.");
+                chasingTarget.isBeingChased = false;
+                EndChase();
+                return;
+            }
+        }
+
+        // Arrest range check.
+        if (Vector3.Distance(transform.position, chasingTarget.transform.position) <= 0.7f)
+        {
+            chasingTarget.Arrest(officerArrestFine);
+            Debug.Log($"{agentName} arrested {chasingTarget.agentName}!");
+            chasingTarget = null;
+            EndChase();
+            return;
+        }
+
+        // Periodically recalculate path toward the moving criminal.
+        chasePathTimer -= Time.deltaTime;
+        if (chasePathTimer <= 0f)
+        {
+            chasePathTimer = 1.5f;
+            Vector3Int target = buildingsTilemap.WorldToCell(chasingTarget.transform.position);
+            StartPathTo(target);
+        }
+    }
+
+    void EndChase()
+    {
+        moveSpeed = normalMoveSpeed;
+        chasingTarget = null;
+        currentState = AgentState.Patrolling;
+        patrolWaitTimer = 3f; // brief pause before resuming patrol
+    }
+
+    Vector3Int GetRandomPatrolPoint()
+    {
+        const int radius = 6;
+        Vector3Int center = employer != null ? employer.gridPosition : buildingsTilemap.WorldToCell(transform.position);
+
+        for (int attempt = 0; attempt < 15; attempt++)
+        {
+            int dx = Random.Range(-radius, radius + 1);
+            int dy = Random.Range(-radius, radius + 1);
+            Vector3Int candidate = center + new Vector3Int(dx, dy, 0);
+            if (pathfinder.IsRoadAt(candidate))
+                return candidate;
+        }
+
+        return center; // fallback — stand at the station if no road found
+    }
+
     // True for destinations we travel to regularly — routes are worth caching.
     bool IsKeyDestination(Vector3Int dest)
     {
@@ -515,8 +657,17 @@ public class Agent : MonoBehaviour
         {
             case AgentState.WalkingToWork:
                 employer.WorkerCheckIn(this);
-                currentState = AgentState.Working;
-                Debug.Log($"{agentName} arrived at work.");
+                if (employer is PoliceStation)
+                {
+                    patrolWaitTimer = 2f;
+                    currentState = AgentState.Patrolling;
+                    Debug.Log($"{agentName} reporting for duty at {employer.buildingName}.");
+                }
+                else
+                {
+                    currentState = AgentState.Working;
+                    Debug.Log($"{agentName} arrived at work.");
+                }
                 break;
 
             case AgentState.WalkingToFood:
@@ -565,6 +716,19 @@ public class Agent : MonoBehaviour
                 else
                     currentState = AgentState.Idle;
                 break;
+
+            case AgentState.Fleeing:
+                // Deposit any carried groceries on safe arrival home.
+                if (homeDwelling != null && carriedItems.Has(ItemType.Groceries))
+                {
+                    int count = carriedItems.Get(ItemType.Groceries);
+                    homeDwelling.pantry.Add(ItemType.Groceries, count);
+                    carriedItems.Remove(ItemType.Groceries, count);
+                }
+                isBeingChased = false;
+                Debug.Log($"{agentName} made it home safely and evaded the police!");
+                currentState = AgentState.Idle;
+                break;
         }
     }
 
@@ -606,6 +770,50 @@ public class Agent : MonoBehaviour
         }
         return false;
     }
+
+    // Called by PoliceStation when assigning this officer to chase a criminal.
+    public void AssignChase(Agent criminal, int fine)
+    {
+        chasingTarget      = criminal;
+        officerArrestFine  = fine;
+        normalMoveSpeed    = moveSpeed;
+        moveSpeed          = 4f;   // officers sprint during a chase
+        isMoving           = false; // interrupt current patrol movement
+        chasePathTimer     = 0f;   // recalculate path immediately
+        currentState       = AgentState.Chasing;
+        criminal.NotifyPoliceChasing();
+        Debug.Log($"{agentName} is pursuing {criminal.agentName}!");
+    }
+
+    // Called when a police officer is assigned to chase this agent.
+    public void NotifyPoliceChasing()
+    {
+        if (currentState == AgentState.Arrested) return;
+        isBeingChased = true;
+        isMoving = false; // interrupt current movement
+        currentState = AgentState.Fleeing;
+        if (hasHome)
+            StartPathTo(homeTile);
+        Debug.Log($"{agentName} is fleeing from the police!");
+    }
+
+    // Called by an officer agent when they catch this agent. Fine deducted immediately.
+    public void Arrest(int fine)
+    {
+        isBeingChased = false;
+        bankBalance -= fine;
+        Debug.Log($"{agentName} was arrested! Lost ${fine} as a fine. Balance: ${bankBalance}");
+        currentState = AgentState.Arrested;
+        StartCoroutine(ReleaseFromArrest());
+    }
+
+    private System.Collections.IEnumerator ReleaseFromArrest()
+    {
+        yield return new WaitForSeconds(5f);
+        Debug.Log($"{agentName} was released from custody.");
+        currentState = AgentState.Idle;
+        thinkTimer = 0f;
+    }
 }
 
 public enum AgentState
@@ -624,5 +832,9 @@ public enum AgentState
     Cooking,
     Working,
     AtPark,
-    WalkingHome
+    WalkingHome,
+    Fleeing,
+    Arrested,
+    Patrolling,
+    Chasing
 }

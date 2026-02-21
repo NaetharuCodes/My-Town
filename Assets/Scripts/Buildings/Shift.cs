@@ -19,6 +19,7 @@ public class Shift
     public bool HasVacancy => assignedWorkers.Count < workersRequired;
     public IReadOnlyList<Agent> AssignedWorkers => assignedWorkers;
     public bool HasPresentWorker => presentWorkers.Count > 0;
+    public IReadOnlyCollection<Agent> PresentWorkers => presentWorkers;
 
     public bool IsActiveAt(int hour)
     {

@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.Tilemaps;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 public class BuildingPlacer : MonoBehaviour
 {
@@ -15,6 +16,7 @@ public class BuildingPlacer : MonoBehaviour
     public TileBase supermarketTile;
     public TileBase officeTile;
     public TileBase parkTile;
+    public TileBase policeStationTile;
 
     [Header("References")]
     public BuildingManager buildingManager;
@@ -42,8 +44,15 @@ public class BuildingPlacer : MonoBehaviour
             SelectTile(officeTile, "Office");
         if (Keyboard.current.digit6Key.wasPressedThisFrame)
             SelectTile(parkTile, "Park");
+        if (Keyboard.current.digit7Key.wasPressedThisFrame)
+            SelectTile(policeStationTile, "Police Station");
         if (Keyboard.current.escapeKey.wasPressedThisFrame)
-            SelectTile(null, "None");
+        {
+            if (selectedTile != null)
+                SelectTile(null, "None");
+            else
+                SceneManager.LoadScene("MainMenu");
+        }
 
         if (Mouse.current.leftButton.isPressed && selectedTile != null)
         {
@@ -124,6 +133,12 @@ public class BuildingPlacer : MonoBehaviour
             Park park = new GameObject("Park").AddComponent<Park>();
             park.gridPosition = cellPos;
             buildingManager.RegisterBuilding(park);
+        }
+        else if (selectedTile == policeStationTile)
+        {
+            PoliceStation station = new GameObject("PoliceStation").AddComponent<PoliceStation>();
+            station.gridPosition = cellPos;
+            buildingManager.RegisterBuilding(station);
         }
     }
 }
