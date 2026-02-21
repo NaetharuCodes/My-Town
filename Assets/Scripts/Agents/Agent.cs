@@ -260,28 +260,24 @@ public class Agent : MonoBehaviour
 
     void HandleSeekingHome()
     {
-        Vector3Int? home = buildingManager.FindAvailableHome();
-        if (home.HasValue)
-        {
-            Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
-            var path = pathfinder.FindPath(currentCell, home.Value);
+        Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
 
-            if (path != null)
+        foreach (Vector3Int home in buildingManager.FindAvailableHomes())
+        {
+            var path = pathfinder.FindPath(currentCell, home);
+            if (path == null) continue; // not reachable from here — try next home
+
+            Building building = buildingManager.GetBuildingAt(home);
+            if (building is ResidentialBuilding residential && residential.Interact(this))
             {
-                Building building = buildingManager.GetBuildingAt(home.Value);
-                if (building is ResidentialBuilding residential && residential.Interact(this))
-                {
-                    StartFollowingPath(path);
-                    currentState = AgentState.WalkingHome;
-                }
-                else
-                    currentState = AgentState.Idle;
+                StartFollowingPath(path);
+                currentState = AgentState.WalkingHome;
+                return;
             }
-            else
-                currentState = AgentState.Idle;
         }
-        else
-            currentState = AgentState.Idle;
+
+        // No reachable home found this cycle — try again later.
+        currentState = AgentState.Idle;
     }
 
     void HandleSeekingWork()
@@ -310,43 +306,37 @@ public class Agent : MonoBehaviour
     void HandleSeekingFood()
     {
         Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
-        Vector3Int? store = buildingManager.FindNearest<BurgerStore>(currentCell, b => b.IsOpen());
 
-        if (store.HasValue)
+        foreach (Vector3Int store in buildingManager.FindAllSorted<BurgerStore>(currentCell, b => b.IsOpen()))
         {
-            var path = pathfinder.FindPath(currentCell, store.Value);
-            if (path != null)
-            {
-                foodTile = store.Value;
-                StartFollowingPath(path);
-                currentState = AgentState.WalkingToFood;
-            }
-            else
-                currentState = AgentState.Idle;
+            var path = pathfinder.FindPath(currentCell, store);
+            if (path == null) continue;
+
+            foodTile = store;
+            StartFollowingPath(path);
+            currentState = AgentState.WalkingToFood;
+            return;
         }
-        else
-            currentState = AgentState.Idle;
+
+        currentState = AgentState.Idle;
     }
 
     void HandleSeekingGroceries()
     {
         Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
-        Vector3Int? market = buildingManager.FindNearest<Supermarket>(currentCell, b => b.IsOpen());
 
-        if (market.HasValue)
+        foreach (Vector3Int market in buildingManager.FindAllSorted<Supermarket>(currentCell, b => b.IsOpen()))
         {
-            var path = pathfinder.FindPath(currentCell, market.Value);
-            if (path != null)
-            {
-                groceryTile = market.Value;
-                StartFollowingPath(path);
-                currentState = AgentState.WalkingToSupermarket;
-            }
-            else
-                currentState = AgentState.Idle;
+            var path = pathfinder.FindPath(currentCell, market);
+            if (path == null) continue;
+
+            groceryTile = market;
+            StartFollowingPath(path);
+            currentState = AgentState.WalkingToSupermarket;
+            return;
         }
-        else
-            currentState = AgentState.Idle;
+
+        currentState = AgentState.Idle;
     }
 
     void HandleEating()
@@ -381,22 +371,19 @@ public class Agent : MonoBehaviour
     void HandleSeekingPark()
     {
         Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
-        Vector3Int? park = buildingManager.FindNearest<Park>(currentCell);
 
-        if (park.HasValue)
+        foreach (Vector3Int park in buildingManager.FindAllSorted<Park>(currentCell))
         {
-            var path = pathfinder.FindPath(currentCell, park.Value);
-            if (path != null)
-            {
-                parkTile = park.Value;
-                StartFollowingPath(path);
-                currentState = AgentState.WalkingToPark;
-            }
-            else
-                currentState = AgentState.Idle;
+            var path = pathfinder.FindPath(currentCell, park);
+            if (path == null) continue;
+
+            parkTile = park;
+            StartFollowingPath(path);
+            currentState = AgentState.WalkingToPark;
+            return;
         }
-        else
-            currentState = AgentState.Idle;
+
+        currentState = AgentState.Idle;
     }
 
     void HandleAtPark()

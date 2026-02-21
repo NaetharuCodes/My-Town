@@ -25,15 +25,13 @@ public class BuildingManager : MonoBehaviour
         return data;
     }
 
-    public Vector3Int? FindAvailableHome()
+    public IEnumerable<Vector3Int> FindAvailableHomes()
     {
-        Debug.Log("Running find home check");
         foreach (var kvp in buildings)
         {
             if (kvp.Value is ResidentialBuilding residential && residential.HasVacantUnit())
-                return kvp.Key;
+                yield return kvp.Key;
         }
-        return null;
     }
 
     public System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<Vector3Int, Building>> GetAllBuildings()
@@ -65,5 +63,25 @@ public class BuildingManager : MonoBehaviour
         }
 
         return nearest;
+    }
+
+    // Returns all buildings of type T matching the optional filter, sorted nearest-first.
+    public IEnumerable<Vector3Int> FindAllSorted<T>(Vector3Int from, System.Func<T, bool> filter = null) where T : Building
+    {
+        var results = new List<(float dist, Vector3Int pos)>();
+
+        foreach (var kvp in buildings)
+        {
+            if (kvp.Value is T building)
+            {
+                if (filter != null && !filter(building)) continue;
+                results.Add((Vector3Int.Distance(from, kvp.Key), kvp.Key));
+            }
+        }
+
+        results.Sort((a, b) => a.dist.CompareTo(b.dist));
+
+        foreach (var entry in results)
+            yield return entry.pos;
     }
 }

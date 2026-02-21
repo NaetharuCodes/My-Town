@@ -29,6 +29,9 @@ public class CameraController : MonoBehaviour
 
     void OnEnable()
     {
+        if (inputActions == null)
+            inputActions = new CameraInputActions();
+
         inputActions.Camera.Enable();
 
         // Subscribe to the zoom action
@@ -39,6 +42,11 @@ public class CameraController : MonoBehaviour
     {
         inputActions.Camera.Zoom.performed -= OnZoom;
         inputActions.Camera.Disable();
+    }
+
+    void OnDestroy()
+    {
+        inputActions?.Dispose();
     }
 
     void Update()
