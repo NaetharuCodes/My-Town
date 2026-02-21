@@ -14,6 +14,7 @@ public class BuildingPlacer : MonoBehaviour
     public TileBase burgerStoreTile;
     public TileBase supermarketTile;
     public TileBase officeTile;
+    public TileBase parkTile;
 
     [Header("References")]
     public BuildingManager buildingManager;
@@ -39,6 +40,8 @@ public class BuildingPlacer : MonoBehaviour
             SelectTile(supermarketTile, "Supermarket");
         if (Keyboard.current.digit5Key.wasPressedThisFrame)
             SelectTile(officeTile, "Office");
+        if (Keyboard.current.digit6Key.wasPressedThisFrame)
+            SelectTile(parkTile, "Park");
         if (Keyboard.current.escapeKey.wasPressedThisFrame)
             SelectTile(null, "None");
 
@@ -115,6 +118,12 @@ public class BuildingPlacer : MonoBehaviour
             Office office = new GameObject("Office").AddComponent<Office>();
             office.gridPosition = cellPos;
             buildingManager.RegisterBuilding(office);
+        }
+        else if (selectedTile == parkTile)
+        {
+            Park park = new GameObject("Park").AddComponent<Park>();
+            park.gridPosition = cellPos;
+            buildingManager.RegisterBuilding(park);
         }
     }
 }

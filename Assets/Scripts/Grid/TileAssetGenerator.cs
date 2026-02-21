@@ -16,6 +16,7 @@ public class TileAssetGenerator : MonoBehaviour
             ("BurgerStore",  new Color(0.85f, 0.25f, 0.25f)),  // red
             ("Supermarket",  new Color(0.25f, 0.65f, 0.85f)),  // cyan-blue
             ("Office",       new Color(0.55f, 0.35f, 0.75f)),  // purple
+            ("Park",         new Color(0.20f, 0.75f, 0.30f)),  // bright green (distinct from grass)
         };
 
         // Make sure the output folders exist

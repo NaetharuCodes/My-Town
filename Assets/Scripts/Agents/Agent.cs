@@ -13,6 +13,14 @@ public class Agent : MonoBehaviour
     public float hungerRate = 0.5f;
     public float hungerThreshold = 60f;
 
+    [Header("Social")]
+    [Range(0f, 100f)]
+    public float loneliness = 0f;
+    public float lonelinessRate = 0.2f;
+    public float lonelinessThreshold = 60f;
+    public float visitDuration = 10f;
+    public float visitLonelinessRestored = 70f;
+
     [Header("Finances")]
     public int bankBalance;
     public int dailyIncome = 70; // Placeholder — replaced by wage once agent has a job
@@ -40,8 +48,10 @@ public class Agent : MonoBehaviour
     private List<Vector3Int> currentPath;
     private Vector3Int foodTile;
     private Vector3Int groceryTile;
+    private Vector3Int parkTile;
     private float eatTimer;
     private float cookingTimer;
+    private float visitTimer;
     private int pathIndex;
     private Vector3 targetWorldPos;
     private bool isMoving = false;
@@ -51,7 +61,7 @@ public class Agent : MonoBehaviour
     // Cached routes for key destinations (home, work) so A* only runs once per route.
     // Keyed by destination; stores the origin so we only use the cache on matching starts.
     // Future: expose which destinations count as "key" via a UI toggle.
-    private Dictionary<Vector3Int, (Vector3Int from, List<Vector3Int> path)> routeCache
+    private readonly Dictionary<Vector3Int, (Vector3Int from, List<Vector3Int> path)> routeCache
         = new Dictionary<Vector3Int, (Vector3Int, List<Vector3Int>)>();
 
     private Inventory carriedItems = new Inventory();
@@ -100,7 +110,8 @@ public class Agent : MonoBehaviour
 
     void Update()
     {
-        hunger = Mathf.Min(hunger + hungerRate * Time.deltaTime, 100f);
+        hunger    = Mathf.Min(hunger    + hungerRate    * Time.deltaTime, 100f);
+        loneliness = Mathf.Min(loneliness + lonelinessRate * Time.deltaTime, 100f);
 
         if (isMoving)
         {
@@ -118,6 +129,8 @@ public class Agent : MonoBehaviour
             case AgentState.Eating:         HandleEating();          break;
             case AgentState.Cooking:        HandleCooking();         break;
             case AgentState.Working:        HandleWorking();         break;
+            case AgentState.AtPark:         HandleAtPark();          break;
+            case AgentState.SeekingPark:    HandleSeekingPark();     break;
         }
     }
 
@@ -209,7 +222,18 @@ public class Agent : MonoBehaviour
             }
         }
 
-        // Priority 6: find a job.
+        // Priority 6: social — visit a park if lonely.
+        if (loneliness >= lonelinessThreshold)
+        {
+            Vector3Int cell = buildingsTilemap.WorldToCell(transform.position);
+            if (buildingManager.FindNearest<Park>(cell).HasValue)
+            {
+                currentState = AgentState.SeekingPark;
+                return;
+            }
+        }
+
+        // Priority 7: find a job.
         if (!hasJob)
         {
             currentState = AgentState.SeekingWork;
@@ -334,6 +358,44 @@ public class Agent : MonoBehaviour
                 Debug.Log($"{agentName} cooked and ate at home. Pantry has {homeDwelling.pantry.Get(ItemType.Groceries)} groceries left.");
             }
             currentState = AgentState.Idle;
+        }
+    }
+
+    void HandleSeekingPark()
+    {
+        Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
+        Vector3Int? park = buildingManager.FindNearest<Park>(currentCell);
+
+        if (park.HasValue)
+        {
+            var path = pathfinder.FindPath(currentCell, park.Value);
+            if (path != null)
+            {
+                parkTile = park.Value;
+                StartFollowingPath(path);
+                currentState = AgentState.WalkingToPark;
+            }
+            else
+                currentState = AgentState.Idle;
+        }
+        else
+            currentState = AgentState.Idle;
+    }
+
+    void HandleAtPark()
+    {
+        visitTimer -= Time.deltaTime;
+        if (visitTimer <= 0f)
+        {
+            loneliness = Mathf.Max(loneliness - visitLonelinessRestored, 0f);
+            Debug.Log($"{agentName} enjoyed the park. Loneliness: {loneliness:0}");
+            if (hasHome)
+            {
+                StartPathTo(homeTile);
+                currentState = AgentState.WalkingHome;
+            }
+            else
+                currentState = AgentState.Idle;
         }
     }
 
@@ -492,6 +554,17 @@ public class Agent : MonoBehaviour
             case AgentState.SeekingHome:
                 currentState = AgentState.Idle;
                 break;
+
+            case AgentState.WalkingToPark:
+                Building parkBuilding = buildingManager.GetBuildingAt(parkTile);
+                if (parkBuilding != null && parkBuilding.Interact(this))
+                {
+                    visitTimer = visitDuration;
+                    currentState = AgentState.AtPark;
+                }
+                else
+                    currentState = AgentState.Idle;
+                break;
         }
     }
 
@@ -542,11 +615,14 @@ public enum AgentState
     SeekingWork,
     SeekingFood,
     SeekingGroceries,
+    SeekingPark,
     WalkingToWork,
     WalkingToFood,
     WalkingToSupermarket,
+    WalkingToPark,
     Eating,
     Cooking,
     Working,
+    AtPark,
     WalkingHome
 }
