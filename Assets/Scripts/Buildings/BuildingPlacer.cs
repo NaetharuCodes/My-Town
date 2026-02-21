@@ -18,6 +18,7 @@ public class BuildingPlacer : MonoBehaviour
 
     private TileBase selectedTile;
     private Camera cam;
+    private Vector3Int lastDragCell = new Vector3Int(int.MinValue, int.MinValue, int.MinValue);
 
     void Start()
     {
@@ -35,10 +36,24 @@ public class BuildingPlacer : MonoBehaviour
         if (Keyboard.current.escapeKey.wasPressedThisFrame)
             SelectTile(null, "None");
 
-        if (Mouse.current.leftButton.wasPressedThisFrame && selectedTile != null)
+        if (Mouse.current.leftButton.isPressed && selectedTile != null)
         {
-            PlaceTile();
+            Vector3 worldPos = cam.ScreenToWorldPoint(Mouse.current.position.ReadValue());
+            Vector3Int cellPos = buildingsTilemap.WorldToCell(worldPos);
+
+            bool isDrag = selectedTile == roadTile;
+            if (!isDrag && !Mouse.current.leftButton.wasPressedThisFrame)
+                return;
+
+            if (cellPos != lastDragCell)
+            {
+                lastDragCell = cellPos;
+                PlaceTile(cellPos);
+            }
         }
+
+        if (Mouse.current.leftButton.wasReleasedThisFrame)
+            lastDragCell = new Vector3Int(int.MinValue, int.MinValue, int.MinValue);
     }
 
     void SelectTile(TileBase tile, string name)
@@ -46,11 +61,8 @@ public class BuildingPlacer : MonoBehaviour
         selectedTile = tile;
     }
 
-    void PlaceTile()
+    void PlaceTile(Vector3Int cellPos)
     {
-        Vector3 worldPos = cam.ScreenToWorldPoint(Mouse.current.position.ReadValue());
-        Vector3Int cellPos = buildingsTilemap.WorldToCell(worldPos);
-
         TileBase terrainAtPos = terrainTilemap.GetTile(cellPos);
         TileBase buildingAtPos = buildingsTilemap.GetTile(cellPos);
 
@@ -81,7 +93,10 @@ public class BuildingPlacer : MonoBehaviour
             buildingManager.RegisterBuilding(building);
         }
         else if (selectedTile == burgerStoreTile)
-            // buildingManager.RegisterBuilding(cellPos, "BurgerStore");
-            Debug.Log("Burger store placement temp disabled");
+        {
+            BurgerStore store = new GameObject("BurgerStore").AddComponent<BurgerStore>();
+            store.gridPosition = cellPos;
+            buildingManager.RegisterBuilding(store);
+        }
     }
 }

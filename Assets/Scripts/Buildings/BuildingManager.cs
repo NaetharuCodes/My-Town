@@ -36,49 +36,24 @@ public class BuildingManager : MonoBehaviour
         return null;
     }
 
-    // public Vector3Int? FindNearestBuildingOfType(Vector3Int from, string type)
-    // {
-    //     Vector3Int? nearest = null;
-    //     float nearestDist = float.MaxValue;
+    public Vector3Int? FindNearest<T>(Vector3Int from) where T : Building
+    {
+        Vector3Int? nearest = null;
+        float nearestDist = float.MaxValue;
 
-    //     foreach (var kvp in buildings)
-    //     {
-    //         if (kvp.Value.BuildingType == type)
-    //         {
-    //             float dist = Vector3Int.Distance(from, kvp.Key);
-    //             if (dist < nearestDist)
-    //             {
-    //                 nearestDist = dist;
-    //                 nearest = kvp.Key;
-    //             }
-    //         }
-    //     }
+        foreach (var kvp in buildings)
+        {
+            if (kvp.Value is T)
+            {
+                float dist = Vector3Int.Distance(from, kvp.Key);
+                if (dist < nearestDist)
+                {
+                    nearestDist = dist;
+                    nearest = kvp.Key;
+                }
+            }
+        }
 
-    //     return nearest;
-    // }
-
-    // // Overload that also checks capacity
-    // public Vector3Int? FindNearestBuildingOfType(Vector3Int from, string type, bool requireCapacity)
-    // {
-    //     Vector3Int? nearest = null;
-    //     float nearestDist = float.MaxValue;
-
-    //     foreach (var kvp in buildings)
-    //     {
-    //         if (kvp.Value.BuildingType == type)
-    //         {
-    //             if (requireCapacity && !kvp.Value.HasCapacity)
-    //                 continue;
-
-    //             float dist = Vector3Int.Distance(from, kvp.Key);
-    //             if (dist < nearestDist)
-    //             {
-    //                 nearestDist = dist;
-    //                 nearest = kvp.Key;
-    //             }
-    //         }
-    //     }
-
-    //     return nearest;
-    // }
+        return nearest;
+    }
 }

@@ -24,8 +24,13 @@ public class Agent : MonoBehaviour
     [Header("Movement")]
     public float moveSpeed = 3f;
 
+    [Header("Eating")]
+    public float eatDuration = 3f;
+
     // Internal
     private List<Vector3Int> currentPath;
+    private Vector3Int foodTile;
+    private float eatTimer;
     private int pathIndex;
     private Vector3 targetWorldPos;
     private bool isMoving = false;
@@ -108,11 +113,14 @@ public class Agent : MonoBehaviour
             if (path != null)
             {
                 Building building = buildingManager.GetBuildingAt(home.Value);
-                if (building is ResidentialBuilding residential)
+                if (building is ResidentialBuilding residential && residential.Interact(this))
                 {
-                    residential.Interact(this);
                     StartFollowingPath(path);
                     currentState = AgentState.WalkingHome;
+                }
+                else
+                {
+                    currentState = AgentState.Idle;
                 }
             }
             else
@@ -127,13 +135,44 @@ public class Agent : MonoBehaviour
     }
     void HandleSeekingFood()
     {
-        // Temporarily disabled until CommercialBuilding is built
-        currentState = AgentState.Idle;
+        Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
+        Vector3Int? store = buildingManager.FindNearest<BurgerStore>(currentCell);
+
+        if (store.HasValue)
+        {
+            var path = pathfinder.FindPath(currentCell, store.Value);
+            if (path != null)
+            {
+                foodTile = store.Value;
+                StartFollowingPath(path);
+                currentState = AgentState.WalkingToFood;
+            }
+            else
+            {
+                currentState = AgentState.Idle;
+            }
+        }
+        else
+        {
+            currentState = AgentState.Idle;
+        }
     }
+
     void HandleEating()
     {
-        // Temporarily disabled until CommercialBuilding is built
-        currentState = AgentState.Idle;
+        eatTimer -= Time.deltaTime;
+        if (eatTimer <= 0f)
+        {
+            if (hasHome)
+            {
+                StartPathTo(homeTile);
+                currentState = AgentState.WalkingHome;
+            }
+            else
+            {
+                currentState = AgentState.Idle;
+            }
+        }
     }
     void StartPathTo(Vector3Int target)
     {
@@ -184,8 +223,16 @@ public class Agent : MonoBehaviour
         switch (currentState)
         {
             case AgentState.WalkingToFood:
-                // Temporarily disabled until CommercialBuilding is built
-                currentState = AgentState.Idle;
+                Building foodBuilding = buildingManager.GetBuildingAt(foodTile);
+                if (foodBuilding != null && foodBuilding.Interact(this))
+                {
+                    eatTimer = eatDuration;
+                    currentState = AgentState.Eating;
+                }
+                else
+                {
+                    currentState = AgentState.Idle;
+                }
                 break;
             case AgentState.WalkingHome:
                 currentState = AgentState.Idle;
@@ -200,6 +247,11 @@ public class Agent : MonoBehaviour
     {
         homeTile = tile;
         hasHome = true;
+    }
+
+    public void Feed(float amount)
+    {
+        hunger = Mathf.Max(hunger - amount, 0f);
     }
 
     public bool TrySpend(int price)

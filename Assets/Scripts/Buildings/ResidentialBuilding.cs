@@ -9,7 +9,7 @@ public class ResidentialBuilding : Building
     {
         foreach (DwellingUnit unit in DwellingUnits)
         {
-            if (unit.DwellingOccupancy.Count > 0)
+            if (unit.DwellingOccupancy.Count == 0)
             {
                 unit.DwellingOccupancy.Add(agent);
                 agent.AssignHome(gridPosition);

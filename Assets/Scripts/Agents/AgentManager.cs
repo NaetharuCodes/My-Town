@@ -34,20 +34,6 @@ public class AgentManager : MonoBehaviour
         agent.agentName = GenerateName();
         agent.Initialise(this, FindFirstObjectByType<Pathfinder>(), buildingsTilemap, buildingManager);
 
-        Vector3Int? home = buildingManager.FindAvailableHome();
-        if (home.HasValue)
-        {
-            Building building = buildingManager.GetBuildingAt(home.Value);
-            if (building is ResidentialBuilding residential)
-            {
-                residential.Interact(agent);
-            }
-        }
-        else
-        {
-            Debug.Log($"{agent.agentName} couldn't find a home — homeless!");
-        }
-
         agents.Add(agent);
     }
     string GenerateName()
