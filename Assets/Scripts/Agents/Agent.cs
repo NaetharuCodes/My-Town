@@ -45,6 +45,14 @@ public class Agent : MonoBehaviour
     private int pathIndex;
     private Vector3 targetWorldPos;
     private bool isMoving = false;
+    private float thinkTimer = 0f;
+    private const float ThinkInterval = 5f; // seconds between Idle priority evaluations
+
+    // Cached routes for key destinations (home, work) so A* only runs once per route.
+    // Keyed by destination; stores the origin so we only use the cache on matching starts.
+    // Future: expose which destinations count as "key" via a UI toggle.
+    private Dictionary<Vector3Int, (Vector3Int from, List<Vector3Int> path)> routeCache
+        = new Dictionary<Vector3Int, (Vector3Int, List<Vector3Int>)>();
 
     private Inventory carriedItems = new Inventory();
     private DwellingUnit homeDwelling;
@@ -115,6 +123,10 @@ public class Agent : MonoBehaviour
 
     void HandleIdle()
     {
+        thinkTimer -= Time.deltaTime;
+        if (thinkTimer > 0f) return;
+        thinkTimer = ThinkInterval;
+
         // Priority 1: work — shift takes precedence over everything.
         if (hasJob && assignedShift != null && timeManager != null)
         {
@@ -334,12 +346,34 @@ public class Agent : MonoBehaviour
         }
     }
 
+    // True for destinations we travel to regularly — routes are worth caching.
+    bool IsKeyDestination(Vector3Int dest)
+    {
+        if (hasHome && dest == homeTile) return true;
+        if (hasJob && dest == employer.gridPosition) return true;
+        return false;
+    }
+
     void StartPathTo(Vector3Int target)
     {
-        Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
-        var path = pathfinder.FindPath(currentCell, target);
+        Vector3Int from = buildingsTilemap.WorldToCell(transform.position);
+
+        // Use cached route if we're starting from the same tile it was computed from.
+        if (IsKeyDestination(target) &&
+            routeCache.TryGetValue(target, out var cached) &&
+            cached.from == from)
+        {
+            StartFollowingPath(new List<Vector3Int>(cached.path));
+            return;
+        }
+
+        var path = pathfinder.FindPath(from, target);
         if (path != null)
+        {
+            if (IsKeyDestination(target))
+                routeCache[target] = (from, new List<Vector3Int>(path));
             StartFollowingPath(path);
+        }
     }
 
     void StartFollowingPath(List<Vector3Int> path)
@@ -372,7 +406,44 @@ public class Agent : MonoBehaviour
         if (Vector3.Distance(transform.position, targetWorldPos) < 0.01f)
         {
             pathIndex++;
+
+            // Before stepping onto the next tile, verify it's still a road.
+            // Skip the check for the destination tile itself — buildings are always reachable.
+            if (pathIndex < currentPath.Count - 1 && !pathfinder.IsRoadAt(currentPath[pathIndex]))
+            {
+                HandleBlockedRoute();
+                return;
+            }
+
             SetNextTarget();
+        }
+    }
+
+    void HandleBlockedRoute()
+    {
+        Vector3Int dest = currentPath[currentPath.Count - 1];
+
+        // Discard the cached route — it's stale due to a map change.
+        // Don't cache the reroute: we're mid-journey at a random tile, not at the
+        // canonical start (home/work). The cache will be rebuilt correctly next time
+        // the agent starts this trip from its usual origin.
+        routeCache.Remove(dest);
+
+        Vector3Int here = buildingsTilemap.WorldToCell(transform.position);
+        var rerouted = pathfinder.FindPath(here, dest);
+        if (rerouted != null)
+        {
+            currentPath = rerouted;
+            pathIndex = 0;
+            SetNextTarget();
+        }
+        else
+        {
+            // No route exists from here — give up and re-evaluate needs.
+            isMoving = false;
+            thinkTimer = 0f;
+            currentState = AgentState.Idle;
+            Debug.Log($"{agentName}: route to destination is blocked, returning to Idle.");
         }
     }
 

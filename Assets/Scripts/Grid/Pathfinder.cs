@@ -75,6 +75,13 @@ public class Pathfinder : MonoBehaviour
         return null;
     }
 
+    // Public so agents can verify cached routes are still traversable.
+    public bool IsRoadAt(Vector3Int pos)
+    {
+        TileBase tile = buildingsTilemap.GetTile(pos);
+        return tile != null && tile.name == "Road";
+    }
+
     bool IsWalkable(Vector3Int pos, Vector3Int start, Vector3Int end)
     {
         // The start and end tiles are always walkable

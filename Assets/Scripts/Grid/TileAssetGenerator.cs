@@ -13,7 +13,9 @@ public class TileAssetGenerator : MonoBehaviour
             ("Water",       new Color(0.25f, 0.52f, 0.85f)),  // calm blue
             ("Road",        new Color(0.40f, 0.40f, 0.40f)),  // grey
             ("House",       new Color(0.85f, 0.65f, 0.30f)),  // warm orange
-            ("BurgerStore", new Color(0.85f, 0.25f, 0.25f))   // red
+            ("BurgerStore",  new Color(0.85f, 0.25f, 0.25f)),  // red
+            ("Supermarket",  new Color(0.25f, 0.65f, 0.85f)),  // cyan-blue
+            ("Office",       new Color(0.55f, 0.35f, 0.75f)),  // purple
         };
 
         // Make sure the output folders exist
@@ -43,15 +45,26 @@ public class TileAssetGenerator : MonoBehaviour
             importer.filterMode = FilterMode.Point;
             importer.SaveAndReimport();
 
-            // Step 4: Create a Tile asset that references this sprite
-            var tile = ScriptableObject.CreateInstance<UnityEngine.Tilemaps.Tile>();
-            tile.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(spritePath);
-            tile.color = Color.white; // Sprite already has colour baked in
-
+            // Step 4: Create or update the Tile asset.
+            // If it already exists we update it in-place to preserve its GUID
+            // (and therefore keep all existing Inspector references intact).
             string tilePath = $"Assets/Tiles/TileAssets/{tileName}.asset";
-            AssetDatabase.CreateAsset(tile, tilePath);
-
-            Debug.Log($"Created tile: {tileName}");
+            var existingTile = AssetDatabase.LoadAssetAtPath<UnityEngine.Tilemaps.Tile>(tilePath);
+            if (existingTile != null)
+            {
+                existingTile.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(spritePath);
+                existingTile.color = Color.white;
+                EditorUtility.SetDirty(existingTile);
+                Debug.Log($"Updated tile: {tileName}");
+            }
+            else
+            {
+                var tile = ScriptableObject.CreateInstance<UnityEngine.Tilemaps.Tile>();
+                tile.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(spritePath);
+                tile.color = Color.white;
+                AssetDatabase.CreateAsset(tile, tilePath);
+                Debug.Log($"Created tile: {tileName}");
+            }
         }
 
         AssetDatabase.SaveAssets();
