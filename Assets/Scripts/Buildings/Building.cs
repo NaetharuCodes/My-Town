@@ -56,6 +56,7 @@ public class Building : MonoBehaviour
             if (quality <= 0f)
             {
                 isOnFire = false;
+                EventLog.LogDanger($"{buildingName} has burnt down!");
                 Debug.Log($"{buildingName} at {gridPosition} has burnt down!");
             }
         }
@@ -76,6 +77,7 @@ public class Building : MonoBehaviour
     void CatchFire()
     {
         isOnFire = true;
+        EventLog.LogDanger($"{buildingName} is on fire!");
         Debug.Log($"{buildingName} at {gridPosition} is on fire!");
 
         if (_fireBuildingManager != null)
@@ -87,13 +89,17 @@ public class Building : MonoBehaviour
                 station.DispatchFirefighter(this);
             }
             else
+            {
+                EventLog.LogWarning($"No fire station to respond to fire at {buildingName}!");
                 Debug.Log($"No fire station available to respond to fire at {buildingName}!");
+            }
         }
     }
 
     public void Extinguish()
     {
         isOnFire = false;
+        EventLog.LogWarning($"Fire at {buildingName} extinguished.");
         Debug.Log($"Fire at {buildingName} ({gridPosition}) has been extinguished.");
     }
 

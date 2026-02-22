@@ -36,6 +36,7 @@ public class AgentManager : MonoBehaviour
 
         AssignRandomPersonality(agent);
         agents.Add(agent);
+        EventLog.Log($"New resident: {agent.agentName}.");
     }
     public IReadOnlyList<Agent> GetAllAgents() => agents;
 
@@ -66,6 +67,7 @@ public class AgentManager : MonoBehaviour
         {
             int level = Random.Range(1, 3);
             agent.personality.SetTrait("thief", level);
+            EventLog.LogWarning($"{agent.agentName} has a thief streak (level {level}).");
             Debug.Log($"{agent.agentName} has personality trait: thief:{level}");
         }
     }

@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 public class TimeManager : MonoBehaviour
 {
@@ -27,10 +26,15 @@ public class TimeManager : MonoBehaviour
 
     public string TimeString => $"Day {currentDay} - {currentHour:00}:00";
 
+    public void SetSpeed(float speed)
+    {
+        Time.timeScale = speed;
+    }
+
+    public float CurrentSpeed => Time.timeScale;
+
     private void Update()
     {
-        ControlSpeed();
-
         timeAccumulator += Time.deltaTime;
         if (timeAccumulator > realSecondsPerGameHour)
         {
@@ -50,31 +54,4 @@ public class TimeManager : MonoBehaviour
         }
     }
 
-    private void ControlSpeed()
-    {
-        if (Keyboard.current.pKey.wasPressedThisFrame)
-        {
-            Time.timeScale = 0;
-        }
-
-        if (Keyboard.current.digit8Key.wasPressedThisFrame)
-        {
-            Time.timeScale = 1;
-        }
-
-        if (Keyboard.current.digit9Key.wasPressedThisFrame)
-        {
-            Time.timeScale = 5;
-        }
-
-        if (Keyboard.current.digit0Key.wasPressedThisFrame)
-        {
-            Time.timeScale = 10;
-        }
-    }
-
-    void OnGUI()
-    {
-        GUI.Label(new Rect(10, 10, 200, 30), TimeString);
-    }
 }

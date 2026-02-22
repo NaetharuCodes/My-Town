@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.Tilemaps;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
+using UnityEngine.EventSystems;
 
 public class BuildingPlacer : MonoBehaviour
 {
@@ -33,22 +34,6 @@ public class BuildingPlacer : MonoBehaviour
 
     void Update()
     {
-        if (Keyboard.current.digit1Key.wasPressedThisFrame)
-            SelectTile(roadTile, "Road");
-        if (Keyboard.current.digit2Key.wasPressedThisFrame)
-            SelectTile(houseTile, "House");
-        if (Keyboard.current.digit3Key.wasPressedThisFrame)
-            SelectTile(burgerStoreTile, "Burger Store");
-        if (Keyboard.current.digit4Key.wasPressedThisFrame)
-            SelectTile(supermarketTile, "Supermarket");
-        if (Keyboard.current.digit5Key.wasPressedThisFrame)
-            SelectTile(officeTile, "Office");
-        if (Keyboard.current.digit6Key.wasPressedThisFrame)
-            SelectTile(parkTile, "Park");
-        if (Keyboard.current.digit7Key.wasPressedThisFrame)
-            SelectTile(policeStationTile, "Police Station");
-        if (Keyboard.current.digit8Key.wasPressedThisFrame)
-            SelectTile(fireStationTile, "Fire Station");
         if (Keyboard.current.escapeKey.wasPressedThisFrame)
         {
             if (selectedTile != null)
@@ -59,6 +44,13 @@ public class BuildingPlacer : MonoBehaviour
 
         if (Mouse.current.leftButton.isPressed && selectedTile != null)
         {
+            // Don't place tiles when the mouse is over a UI element
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+            {
+                lastDragCell = new Vector3Int(int.MinValue, int.MinValue, int.MinValue);
+                return;
+            }
+
             Vector3 worldPos = cam.ScreenToWorldPoint(Mouse.current.position.ReadValue());
             Vector3Int cellPos = buildingsTilemap.WorldToCell(worldPos);
 
@@ -77,7 +69,9 @@ public class BuildingPlacer : MonoBehaviour
             lastDragCell = new Vector3Int(int.MinValue, int.MinValue, int.MinValue);
     }
 
-    void SelectTile(TileBase tile, string name)
+    public TileBase CurrentSelectedTile => selectedTile;
+
+    public void SelectTile(TileBase tile, string name)
     {
         selectedTile = tile;
     }
@@ -92,13 +86,13 @@ public class BuildingPlacer : MonoBehaviour
 
         if (terrainAtPos.name == "Water")
         {
-            Debug.Log("Can't build on water!");
+            EventLog.Log("Can't build on water.");
             return;
         }
 
         if (buildingAtPos != null)
         {
-            Debug.Log("Something is already built here!");
+            EventLog.Log("Something is already built here.");
             return;
         }
 

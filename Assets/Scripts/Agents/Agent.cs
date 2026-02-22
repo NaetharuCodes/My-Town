@@ -308,6 +308,7 @@ public class Agent : MonoBehaviour
                 employer = building;
                 assignedShift = shift;
                 hasJob = true;
+                EventLog.Log($"{agentName} got a job at {building.buildingName}.");
                 Debug.Log($"{agentName} got a job at {building.buildingName}. " +
                           $"Shift: {shift.startHour}:00 – {(shift.startHour + shift.durationHours) % 24}:00");
             }
@@ -748,6 +749,7 @@ public class Agent : MonoBehaviour
                 {
                     extinguishTimer = ExtinguishDuration;
                     currentState = AgentState.Extinguishing;
+                    EventLog.LogWarning($"{agentName} fighting fire at {burningBuilding.buildingName}.");
                     Debug.Log($"{agentName} arrived at fire at {burningBuilding.buildingName}. Extinguishing...");
                 }
                 else
@@ -803,7 +805,10 @@ public class Agent : MonoBehaviour
     {
         bankBalance -= amount;
         if (bankBalance < 0)
+        {
+            EventLog.LogMoney($"{agentName} can't afford rent! Balance: ${bankBalance}");
             Debug.Log($"{agentName} can't afford rent! Balance: ${bankBalance}");
+        }
         else
             Debug.Log($"{agentName} paid ${amount} rent. Balance: ${bankBalance}");
     }
@@ -835,6 +840,7 @@ public class Agent : MonoBehaviour
         chasePathTimer     = 0f;   // recalculate path immediately
         currentState       = AgentState.Chasing;
         criminal.NotifyPoliceChasing();
+        EventLog.LogWarning($"{agentName} is chasing {criminal.agentName}!");
         Debug.Log($"{agentName} is pursuing {criminal.agentName}!");
     }
 
@@ -847,6 +853,7 @@ public class Agent : MonoBehaviour
         currentState = AgentState.Fleeing;
         if (hasHome)
             StartPathTo(homeTile);
+        EventLog.LogWarning($"{agentName} is fleeing from police!");
         Debug.Log($"{agentName} is fleeing from the police!");
     }
 
@@ -855,6 +862,7 @@ public class Agent : MonoBehaviour
     {
         isBeingChased = false;
         bankBalance -= fine;
+        EventLog.LogDanger($"{agentName} was arrested and fined ${fine}.");
         Debug.Log($"{agentName} was arrested! Lost ${fine} as a fine. Balance: ${bankBalance}");
         currentState = AgentState.Arrested;
         StartCoroutine(ReleaseFromArrest());
@@ -863,6 +871,7 @@ public class Agent : MonoBehaviour
     private System.Collections.IEnumerator ReleaseFromArrest()
     {
         yield return new WaitForSeconds(5f);
+        EventLog.Log($"{agentName} was released from custody.");
         Debug.Log($"{agentName} was released from custody.");
         currentState = AgentState.Idle;
         thinkTimer = 0f;

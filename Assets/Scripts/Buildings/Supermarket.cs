@@ -33,11 +33,13 @@ public class Supermarket : CommercialBuilding
         if (agent.personality.HasTrait("thief") && agent.personality.RollTrait("thief"))
         {
             agent.AddToInventory(ItemType.Groceries, groceriesPerPack);
+            EventLog.LogDanger($"{agent.agentName} stole from {buildingName}!");
             Debug.Log($"{agent.agentName} STOLE {groceriesPerPack} groceries from {buildingName}!");
 
             // 40% chance of being caught regardless of thief level.
             if (Random.value < 0.4f)
             {
+                EventLog.LogDanger($"{agent.agentName} was caught stealing – police alerted!");
                 Debug.Log($"{agent.agentName} was caught stealing! Alerting police...");
                 AlertPolice(agent);
             }
@@ -65,6 +67,7 @@ public class Supermarket : CommercialBuilding
         if (station != null)
             station.DispatchOfficer(criminal);
         else
+            EventLog.LogWarning($"No police in town — {criminal.agentName} gets away!");
             Debug.Log($"No police station in town — {criminal.agentName} gets away!");
     }
 }

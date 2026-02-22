@@ -139,6 +139,7 @@ public class CommercialBuilding : Building
             }
             else
             {
+                EventLog.LogMoney($"{buildingName} can't afford to pay {worker.agentName}!");
                 Debug.Log($"{buildingName} can't afford to pay {worker.agentName}!");
             }
         }
