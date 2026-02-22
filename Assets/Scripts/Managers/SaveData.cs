@@ -21,7 +21,7 @@ public class TimeSaveData
 [System.Serializable]
 public class BuildingSaveData
 {
-    // "House", "BurgerStore", "Supermarket", "Office", "Park", "PoliceStation", "Road"
+    // "House", "BurgerStore", "Supermarket", "Office", "Park", "PoliceStation", "FireStation", "Road"
     public string type;
     public int x;
     public int y;

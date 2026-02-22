@@ -496,6 +496,8 @@ MonoBehaviour:
   supermarketTile: {fileID: 11400000, guid: 6c8f63a6ec9c35744a502dccd221557e, type: 2}
   officeTile: {fileID: 11400000, guid: e285d7025e369f84ba31f961c90cc58b, type: 2}
   parkTile: {fileID: 11400000, guid: 0a2528e8f15befa4a8a7154dba5578c3, type: 2}
+  policeStationTile: {fileID: 11400000, guid: ff74de81c32959b4e8f40bcac30b273e, type: 2}
+  fireStationTile: {fileID: 11400000, guid: e7e7cec9cb932414a87c62e89b9036b4, type: 2}
   buildingManager: {fileID: 892924912}
 --- !u!4 &774972512
 Transform:

@@ -114,6 +114,11 @@ public class SaveManager : MonoBehaviour
                 bd.type = "PoliceStation";
                 bd.shiftWorkerNames = ps.GetAssignedWorkerNames();
             }
+            else if (building is FireStation fs)
+            {
+                bd.type = "FireStation";
+                bd.shiftWorkerNames = fs.GetAssignedWorkerNames();
+            }
 
             data.buildings.Add(bd);
         }
@@ -278,6 +283,7 @@ public class SaveManager : MonoBehaviour
         "Office"        => buildingPlacer.officeTile,
         "Park"          => buildingPlacer.parkTile,
         "PoliceStation" => buildingPlacer.policeStationTile,
+        "FireStation"   => buildingPlacer.fireStationTile,
         _               => null
     };
 
@@ -319,6 +325,12 @@ public class SaveManager : MonoBehaviour
             case "PoliceStation":
             {
                 PoliceStation b = new GameObject("PoliceStation").AddComponent<PoliceStation>();
+                b.gridPosition = pos;
+                return b;
+            }
+            case "FireStation":
+            {
+                FireStation b = new GameObject("FireStation").AddComponent<FireStation>();
                 b.gridPosition = pos;
                 return b;
             }

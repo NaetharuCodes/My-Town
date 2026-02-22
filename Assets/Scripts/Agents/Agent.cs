@@ -20,6 +20,11 @@ public class Agent : MonoBehaviour
     private float patrolWaitTimer;
     private float normalMoveSpeed;
 
+    // Internal firefighter state
+    private Building burningBuilding;
+    private float extinguishTimer;
+    private const float ExtinguishDuration = 8f;
+
     [Header("Needs")]
     [Range(0f, 100f)]
     public float hunger = 0f;
@@ -144,10 +149,12 @@ public class Agent : MonoBehaviour
             case AgentState.Working:        HandleWorking();         break;
             case AgentState.AtPark:         HandleAtPark();          break;
             case AgentState.SeekingPark:    HandleSeekingPark();     break;
-            case AgentState.Fleeing:        HandleFleeing();         break;
-            case AgentState.Arrested:       /* coroutine handles release */ break;
-            case AgentState.Patrolling:     HandlePatrolling();      break;
-            case AgentState.Chasing:        HandleChasing();         break;
+            case AgentState.Fleeing:           HandleFleeing();           break;
+            case AgentState.Arrested:          /* coroutine handles release */ break;
+            case AgentState.Patrolling:        HandlePatrolling();        break;
+            case AgentState.Chasing:           HandleChasing();           break;
+            case AgentState.RespondingToFire:  HandleRespondingToFire();  break;
+            case AgentState.Extinguishing:     HandleExtinguishing();     break;
         }
     }
 
@@ -171,7 +178,13 @@ public class Agent : MonoBehaviour
                 else
                 {
                     employer.WorkerCheckIn(this);
-                    currentState = AgentState.Working;
+                    if (employer is PoliceStation || employer is FireStation)
+                    {
+                        patrolWaitTimer = 2f;
+                        currentState = AgentState.Patrolling;
+                    }
+                    else
+                        currentState = AgentState.Working;
                 }
                 return;
             }
@@ -520,6 +533,43 @@ public class Agent : MonoBehaviour
         patrolWaitTimer = 3f; // brief pause before resuming patrol
     }
 
+    void HandleRespondingToFire()
+    {
+        // Path failed or fire was already dealt with — abort.
+        if (burningBuilding == null || !burningBuilding.isOnFire)
+        {
+            burningBuilding = null;
+            currentState = AgentState.Patrolling;
+            patrolWaitTimer = 2f;
+            return;
+        }
+        // Retry path to the burning building.
+        StartPathTo(burningBuilding.gridPosition);
+    }
+
+    void HandleExtinguishing()
+    {
+        extinguishTimer -= Time.deltaTime;
+        if (extinguishTimer <= 0f)
+        {
+            if (burningBuilding != null && burningBuilding.isOnFire)
+                burningBuilding.Extinguish();
+
+            burningBuilding = null;
+            currentState = AgentState.Patrolling;
+            patrolWaitTimer = 3f;
+        }
+    }
+
+    // Called by FireStation when dispatching this agent to a burning building.
+    public void AssignFireResponse(Building target)
+    {
+        burningBuilding = target;
+        isMoving = false; // interrupt current patrol
+        currentState = AgentState.RespondingToFire;
+        StartPathTo(target.gridPosition);
+    }
+
     Vector3Int GetRandomPatrolPoint()
     {
         const int radius = 6;
@@ -644,7 +694,7 @@ public class Agent : MonoBehaviour
         {
             case AgentState.WalkingToWork:
                 employer.WorkerCheckIn(this);
-                if (employer is PoliceStation)
+                if (employer is PoliceStation || employer is FireStation)
                 {
                     patrolWaitTimer = 2f;
                     currentState = AgentState.Patrolling;
@@ -691,6 +741,22 @@ public class Agent : MonoBehaviour
 
             case AgentState.SeekingHome:
                 currentState = AgentState.Idle;
+                break;
+
+            case AgentState.RespondingToFire:
+                if (burningBuilding != null && burningBuilding.isOnFire)
+                {
+                    extinguishTimer = ExtinguishDuration;
+                    currentState = AgentState.Extinguishing;
+                    Debug.Log($"{agentName} arrived at fire at {burningBuilding.buildingName}. Extinguishing...");
+                }
+                else
+                {
+                    // Fire already out by the time we arrived
+                    burningBuilding = null;
+                    currentState = AgentState.Patrolling;
+                    patrolWaitTimer = 2f;
+                }
                 break;
 
             case AgentState.WalkingToPark:
@@ -823,5 +889,7 @@ public enum AgentState
     Fleeing,
     Arrested,
     Patrolling,
-    Chasing
+    Chasing,
+    RespondingToFire,
+    Extinguishing
 }

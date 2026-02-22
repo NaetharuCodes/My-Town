@@ -13,11 +13,12 @@ public class TileAssetGenerator : MonoBehaviour
             ("Water",       new Color(0.25f, 0.52f, 0.85f)),  // calm blue
             ("Road",        new Color(0.40f, 0.40f, 0.40f)),  // grey
             ("House",       new Color(0.85f, 0.65f, 0.30f)),  // warm orange
-            ("BurgerStore",  new Color(0.85f, 0.25f, 0.25f)),  // red
+            ("BurgerStore",  new Color(0.60f, 0.25f, 0.25f)),  // red
             ("Supermarket",  new Color(0.25f, 0.65f, 0.85f)),  // cyan-blue
             ("Office",       new Color(0.55f, 0.35f, 0.75f)),  // purple
-            ("Park",         new Color(0.20f, 0.75f, 0.30f)),  // bright green (distinct from grass)
-            ("PoliceStation", new Color(0.15f, 0.0f, 0.95f)),  // bright blue (distinct from grass)
+            ("Park",         new Color(0.20f, 0.75f, 0.30f)),  // bright green 
+            ("PoliceStation", new Color(0.15f, 0.0f, 0.95f)),  // bright blue 
+            ("FireStation", new Color(0.95f, 0.0f, 0.5f)),  // bright Red 
         };
 
         // Make sure the output folders exist

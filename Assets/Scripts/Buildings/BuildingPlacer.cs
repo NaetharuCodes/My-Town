@@ -17,6 +17,7 @@ public class BuildingPlacer : MonoBehaviour
     public TileBase officeTile;
     public TileBase parkTile;
     public TileBase policeStationTile;
+    public TileBase fireStationTile;
 
     [Header("References")]
     public BuildingManager buildingManager;
@@ -46,6 +47,8 @@ public class BuildingPlacer : MonoBehaviour
             SelectTile(parkTile, "Park");
         if (Keyboard.current.digit7Key.wasPressedThisFrame)
             SelectTile(policeStationTile, "Police Station");
+        if (Keyboard.current.digit8Key.wasPressedThisFrame)
+            SelectTile(fireStationTile, "Fire Station");
         if (Keyboard.current.escapeKey.wasPressedThisFrame)
         {
             if (selectedTile != null)
@@ -137,6 +140,12 @@ public class BuildingPlacer : MonoBehaviour
         else if (selectedTile == policeStationTile)
         {
             PoliceStation station = new GameObject("PoliceStation").AddComponent<PoliceStation>();
+            station.gridPosition = cellPos;
+            buildingManager.RegisterBuilding(station);
+        }
+        else if (selectedTile == fireStationTile)
+        {
+            FireStation station = new GameObject("FireStation").AddComponent<FireStation>();
             station.gridPosition = cellPos;
             buildingManager.RegisterBuilding(station);
         }
