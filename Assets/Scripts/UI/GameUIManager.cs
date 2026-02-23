@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Tilemaps;
@@ -29,6 +30,7 @@ public class GameUIManager : MonoBehaviour
     public Sprite parkIcon;
     public Sprite policeStationIcon;
     public Sprite fireStationIcon;
+    public Sprite arrivalPointIcon;
 
     // ── live UI references ────────────────────────────────────────────────────
     private Text       timeText;
@@ -40,10 +42,15 @@ public class GameUIManager : MonoBehaviour
     // Build mode
     private Button     buildToggleButton;
 
-    // Info panel
-    private GameObject infoPanel;
-    private Text       infoPanelTitle;
-    private Text       infoPanelContent;
+    // Inspection modal
+    private GameObject inspectBackdrop;    // full-screen dimmer + click-to-close
+    private GameObject inspectModal;       // the visible panel
+    private Text       inspectTitle;       // modal title (building/agent name)
+    private GameObject tabStrip;           // parent of tab buttons
+    private List<Button> inspectTabs = new List<Button>();
+    private Text       inspectContent;     // scrollable content text
+    private string[]   inspectTabContent;  // pre-built content strings per tab
+    private int        activeTabIdx;
 
     // ── colour palette ────────────────────────────────────────────────────────
     private static readonly Color PanelBg    = new Color(0.10f, 0.10f, 0.12f, 0.92f);
@@ -77,13 +84,12 @@ public class GameUIManager : MonoBehaviour
         Canvas canvas = BuildCanvas();
         BuildTopBar(canvas);
         BuildBottomBar(canvas);
-        BuildInfoPanel(canvas);
+        BuildInspectModal(canvas);
 
         if (selectionManager != null)
         {
-            selectionManager.OnBuildingSelected += _ => RefreshInfoPanel();
-            selectionManager.OnAgentSelected    += _ => RefreshInfoPanel();
-            selectionManager.OnSelectionCleared += HideInfoPanel;
+            selectionManager.OnTileInspected    += ShowInspectModal;
+            selectionManager.OnSelectionCleared += HideInspectModal;
         }
     }
 
@@ -93,30 +99,15 @@ public class GameUIManager : MonoBehaviour
         if (timeText != null && timeManager != null)
             timeText.text = timeManager.TimeString;
 
-        // Sync build panel state when tile is deselected externally (ESC key)
-        if (buildingPlacer != null && buildingPlacer.CurrentSelectedTile == null && activeBuildIdx >= 0)
+        // Sync build panel state when tile/delete-mode is cleared externally (ESC key)
+        if (buildingPlacer != null && buildingPlacer.CurrentSelectedTile == null
+            && !buildingPlacer.DeleteModeActive && activeBuildIdx >= 0)
         {
             SetActiveBuildButton(-1);
             if (buildPanel != null && buildPanel.activeSelf)
             {
                 buildPanel.SetActive(false);
                 ApplyActiveState(buildToggleButton, false);
-            }
-        }
-
-        // Keep info panel live while something is selected
-        if (infoPanel != null && infoPanel.activeSelf)
-        {
-            // Clear if the selected object was destroyed
-            if (selectionManager != null &&
-                selectionManager.SelectedBuilding == null &&
-                selectionManager.SelectedAgent    == null)
-            {
-                HideInfoPanel();
-            }
-            else
-            {
-                RefreshInfoPanel();
             }
         }
     }
@@ -258,8 +249,9 @@ public class GameUIManager : MonoBehaviour
         hlg.childControlHeight     = true;
 
         // Building definitions – order matches buildButtons[]
-        string[] lbls  = { "Road", "House", "Burger Store", "Supermarket", "Office", "Park", "Police", "Fire Stn" };
-        Sprite[] icons = { roadIcon, houseIcon, burgerStoreIcon, supermarketIcon, officeIcon, parkIcon, policeStationIcon, fireStationIcon };
+        // Last entry is the Delete (demolish) tool — no tile, no icon.
+        string[] lbls  = { "Road", "House", "Burger Store", "Supermarket", "Office", "Park", "Police", "Fire Stn", "Bus Stop", "Delete" };
+        Sprite[] icons = { roadIcon, houseIcon, burgerStoreIcon, supermarketIcon, officeIcon, parkIcon, policeStationIcon, fireStationIcon, arrivalPointIcon, null };
         TileBase[] tiles = buildingPlacer != null
             ? new TileBase[] {
                 buildingPlacer.roadTile,
@@ -269,18 +261,25 @@ public class GameUIManager : MonoBehaviour
                 buildingPlacer.officeTile,
                 buildingPlacer.parkTile,
                 buildingPlacer.policeStationTile,
-                buildingPlacer.fireStationTile }
-            : new TileBase[8];
+                buildingPlacer.fireStationTile,
+                buildingPlacer.arrivalPointTile,
+                null }
+            : new TileBase[10];
 
         buildButtons = new Button[lbls.Length];
+        int deleteIdx = lbls.Length - 1;
         for (int i = 0; i < lbls.Length; i++)
         {
             int      idx  = i;
             TileBase tile = tiles[i];
             string   lbl  = lbls[i];
 
-            GameObject btn = MakeIconButton(grp.transform, lbl, icons[i], () => OnBuildTileSelected(idx, tile, lbl));
-            btn.AddComponent<LayoutElement>().preferredWidth = 92f;
+            UnityEngine.Events.UnityAction onClick = (idx == deleteIdx)
+                ? (UnityEngine.Events.UnityAction)(() => OnDeleteModeSelected(deleteIdx))
+                : () => OnBuildTileSelected(idx, tile, lbl);
+
+            GameObject btn = MakeIconButton(grp.transform, lbl, icons[i], onClick);
+            btn.AddComponent<LayoutElement>().preferredWidth = 84f;
             buildButtons[i] = btn.GetComponent<Button>();
         }
     }
@@ -308,12 +307,29 @@ public class GameUIManager : MonoBehaviour
     void ExitBuildMode()
     {
         buildingPlacer?.SelectTile(null, "None");
+        buildingPlacer?.SetDeleteMode(false);
         SetActiveBuildButton(-1);
         ApplyActiveState(buildToggleButton, false);
     }
 
+    void OnDeleteModeSelected(int idx)
+    {
+        // Toggle: clicking Delete again while already active turns it off.
+        if (buildingPlacer != null && buildingPlacer.DeleteModeActive)
+        {
+            buildingPlacer.SetDeleteMode(false);
+            SetActiveBuildButton(-1);
+        }
+        else
+        {
+            buildingPlacer?.SetDeleteMode(true);
+            SetActiveBuildButton(idx);
+        }
+    }
+
     void OnBuildTileSelected(int idx, TileBase tile, string label)
     {
+        buildingPlacer?.SetDeleteMode(false); // clear delete mode if it was active
         buildingPlacer?.SelectTile(tile, label);
         SetActiveBuildButton(idx);
     }
@@ -347,67 +363,188 @@ public class GameUIManager : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Info panel – selection details
+    // Inspection modal
     // ─────────────────────────────────────────────────────────────────────────
 
-    void BuildInfoPanel(Canvas canvas)
+    void BuildInspectModal(Canvas canvas)
     {
-        // Panel: top-right, below the top bar, fixed size
-        infoPanel = MakePanel(canvas.transform, PanelBg);
-        RectTransform r = infoPanel.GetComponent<RectTransform>();
-        r.anchorMin       = new Vector2(1f, 1f);
-        r.anchorMax       = new Vector2(1f, 1f);
-        r.pivot           = new Vector2(1f, 1f);
-        r.sizeDelta       = new Vector2(240f, 320f);
-        r.anchoredPosition = new Vector2(-8f, -58f); // 8px from right, below top bar
+        const float modalW = 520f;
+        const float modalH = 500f;
+        const float titleH = 44f;
+        const float tabH   = 36f;
 
-        // Title text (top strip, 44px tall)
-        // Use offsetMin/offsetMax directly — mixing sizeDelta with offsetMin/Max collapses height to 0.
-        GameObject titleGo = MakeText(infoPanel.transform, "", 15, TextAnchor.MiddleLeft, White);
-        RectTransform tr = titleGo.GetComponent<RectTransform>();
-        tr.anchorMin = new Vector2(0f, 1f);
-        tr.anchorMax = new Vector2(1f, 1f);
-        tr.pivot     = new Vector2(0.5f, 1f);
-        tr.offsetMin = new Vector2(10f, -44f);  // left inset 10, extends 44px down from top anchor
-        tr.offsetMax = new Vector2(-10f,  0f);  // right inset 10, flush with top anchor
-        infoPanelTitle = titleGo.GetComponent<Text>();
+        // ── Backdrop (full-screen dimmer + click-outside-to-close) ─────────────
+        inspectBackdrop = new GameObject("InspectBackdrop");
+        inspectBackdrop.transform.SetParent(canvas.transform, false);
+        Image bdImg = inspectBackdrop.AddComponent<Image>();
+        bdImg.color = new Color(0f, 0f, 0f, 0.45f);
+        RectTransform bdr = inspectBackdrop.GetComponent<RectTransform>();
+        bdr.anchorMin = Vector2.zero;
+        bdr.anchorMax = Vector2.one;
+        bdr.offsetMin = bdr.offsetMax = Vector2.zero;
 
-        // Content text (fills rest of panel)
-        GameObject contentGo = MakeText(infoPanel.transform, "", 11, TextAnchor.UpperLeft, new Color(0.88f, 0.88f, 0.88f));
-        RectTransform cr = contentGo.GetComponent<RectTransform>();
-        cr.anchorMin = new Vector2(0f, 0f);
-        cr.anchorMax = new Vector2(1f, 1f);
-        cr.offsetMin = new Vector2(10f, 8f);
-        cr.offsetMax = new Vector2(-10f, -48f);
-        infoPanelContent = contentGo.GetComponent<Text>();
-        infoPanelContent.GetComponent<Text>().horizontalOverflow = HorizontalWrapMode.Wrap;
+        // Make the backdrop itself a button so clicks outside the modal close it
+        Button bdBtn = inspectBackdrop.AddComponent<Button>();
+        bdBtn.targetGraphic = bdImg;
+        bdBtn.colors = MakeColorBlock(new Color(0,0,0,0), new Color(0,0,0,0.1f), new Color(0,0,0,0.2f));
+        bdBtn.onClick.AddListener(HideInspectModal);
+        inspectBackdrop.SetActive(false); // hide immediately — shown only when modal opens
 
-        infoPanel.SetActive(false);
+        // ── Modal panel ────────────────────────────────────────────────────────
+        inspectModal = MakePanel(canvas.transform, PanelBg);
+        RectTransform mr = inspectModal.GetComponent<RectTransform>();
+        mr.anchorMin       = new Vector2(0.5f, 0.5f);
+        mr.anchorMax       = new Vector2(0.5f, 0.5f);
+        mr.pivot           = new Vector2(0.5f, 0.5f);
+        mr.sizeDelta       = new Vector2(modalW, modalH);
+        mr.anchoredPosition = Vector2.zero;
+        inspectModal.SetActive(false); // hide immediately — shown only when inspecting
+
+        // ── Title bar ──────────────────────────────────────────────────────────
+        GameObject titleBar = MakePanel(inspectModal.transform, new Color(0.07f, 0.07f, 0.09f, 1f));
+        RectTransform tbr = titleBar.GetComponent<RectTransform>();
+        tbr.anchorMin = new Vector2(0f, 1f);
+        tbr.anchorMax = new Vector2(1f, 1f);
+        tbr.pivot     = new Vector2(0.5f, 1f);
+        tbr.offsetMin = new Vector2(0f, -titleH);
+        tbr.offsetMax = Vector2.zero;
+
+        // Title text
+        GameObject titleGo = MakeText(titleBar.transform, "", 15, TextAnchor.MiddleLeft, White);
+        RectTransform ttr = titleGo.GetComponent<RectTransform>();
+        ttr.anchorMin = Vector2.zero;
+        ttr.anchorMax = Vector2.one;
+        ttr.offsetMin = new Vector2(12f, 0f);
+        ttr.offsetMax = new Vector2(-50f, 0f);
+        inspectTitle = titleGo.GetComponent<Text>();
+
+        // Close [X] button
+        GameObject closeBtn = MakeSimpleButton(titleBar.transform, "X", 14, HideInspectModal);
+        RectTransform cr = closeBtn.GetComponent<RectTransform>();
+        cr.anchorMin       = new Vector2(1f, 0.5f);
+        cr.anchorMax       = new Vector2(1f, 0.5f);
+        cr.pivot           = new Vector2(1f, 0.5f);
+        cr.sizeDelta       = new Vector2(36f, 28f);
+        cr.anchoredPosition = new Vector2(-8f, 0f);
+
+        // ── Tab strip ──────────────────────────────────────────────────────────
+        tabStrip = new GameObject("TabStrip");
+        tabStrip.transform.SetParent(inspectModal.transform, false);
+        RectTransform tsr = tabStrip.AddComponent<RectTransform>();
+        tsr.anchorMin = new Vector2(0f, 1f);
+        tsr.anchorMax = new Vector2(1f, 1f);
+        tsr.pivot     = new Vector2(0.5f, 1f);
+        tsr.offsetMin = new Vector2(0f, -(titleH + tabH));
+        tsr.offsetMax = new Vector2(0f, -titleH);
+
+        // Tabs are built dynamically in ShowInspectModal
+
+        // ── Scrollable content area ────────────────────────────────────────────
+        // Simple overflowing text – avoids ScrollRect layout-pass timing issues.
+        // Content that exceeds the panel height will overflow downward (out of view)
+        // but is always visible from the top, which is the right default for inspection.
+        float contentTopOffset = titleH + tabH;
+
+        GameObject contentGo = new GameObject("Content");
+        contentGo.transform.SetParent(inspectModal.transform, false);
+        RectTransform conr = contentGo.AddComponent<RectTransform>();
+        conr.anchorMin = Vector2.zero;
+        conr.anchorMax = Vector2.one;
+        conr.offsetMin = new Vector2(12f, 8f);
+        conr.offsetMax = new Vector2(-12f, -contentTopOffset);
+
+        Text contentText = contentGo.AddComponent<Text>();
+        contentText.font                = defaultFont;
+        contentText.fontSize            = 11;
+        contentText.color               = new Color(0.88f, 0.88f, 0.88f);
+        contentText.alignment           = TextAnchor.UpperLeft;
+        contentText.horizontalOverflow  = HorizontalWrapMode.Wrap;
+        contentText.verticalOverflow    = VerticalWrapMode.Overflow;
+        inspectContent = contentText;
     }
 
-    void RefreshInfoPanel()
+    void ShowInspectModal(Building building, List<Agent> agents)
     {
-        if (infoPanel == null || selectionManager == null) return;
+        // Nothing to show
+        if (building == null && (agents == null || agents.Count == 0))
+            return;
 
-        if (selectionManager.SelectedBuilding != null)
+        // ── Build tab labels + content strings ────────────────────────────────
+        var labels   = new List<string>();
+        var contents = new List<string>();
+
+        if (building != null)
         {
-            Building b = selectionManager.SelectedBuilding;
-            infoPanelTitle.text   = b.buildingName;
-            infoPanelContent.text = BuildingInfoText(b);
-            infoPanel.SetActive(true);
+            labels.Add(building.buildingName);
+            contents.Add(BuildingInfoText(building));
         }
-        else if (selectionManager.SelectedAgent != null)
+
+        if (agents != null)
         {
-            Agent a = selectionManager.SelectedAgent;
-            infoPanelTitle.text   = a.agentName;
-            infoPanelContent.text = AgentInfoText(a);
-            infoPanel.SetActive(true);
+            foreach (Agent a in agents)
+            {
+                // Use first name only to keep tabs compact
+                string firstName = a.agentName.Contains(' ')
+                    ? a.agentName.Split(' ')[0]
+                    : a.agentName;
+                labels.Add(firstName);
+                contents.Add(AgentInfoText(a));
+            }
         }
+
+        inspectTabContent = contents.ToArray();
+
+        // ── Title: building name, or agent name if no building ─────────────────
+        inspectTitle.text = building != null ? building.buildingName
+            : (agents != null && agents.Count > 0 ? agents[0].agentName : "");
+
+        // ── Rebuild tab buttons ────────────────────────────────────────────────
+        foreach (Button old in inspectTabs)
+            if (old != null) Destroy(old.gameObject);
+        inspectTabs.Clear();
+
+        float modalW   = 520f;
+        float tabW     = Mathf.Max(60f, modalW / labels.Count);
+        int   tabFontSize = tabW < 80f ? 9 : 11;
+
+        for (int i = 0; i < labels.Count; i++)
+        {
+            int capturedIdx = i;
+            GameObject tabGo = MakeSimpleButton(tabStrip.transform, labels[i], tabFontSize,
+                () => SelectInspectTab(capturedIdx));
+
+            RectTransform tr = tabGo.GetComponent<RectTransform>();
+            tr.anchorMin       = new Vector2(0f, 0f);
+            tr.anchorMax       = new Vector2(0f, 1f);
+            tr.pivot           = new Vector2(0f, 0.5f);
+            tr.sizeDelta       = new Vector2(tabW, 0f);
+            tr.anchoredPosition = new Vector2(i * tabW, 0f);
+
+            inspectTabs.Add(tabGo.GetComponent<Button>());
+        }
+
+        // ── Show first tab ─────────────────────────────────────────────────────
+        activeTabIdx = 0;
+        SelectInspectTab(0);
+
+        inspectBackdrop.SetActive(true);
+        inspectModal.SetActive(true);
     }
 
-    void HideInfoPanel()
+    void SelectInspectTab(int idx)
     {
-        if (infoPanel != null) infoPanel.SetActive(false);
+        if (inspectTabContent == null || idx >= inspectTabContent.Length) return;
+        activeTabIdx = idx;
+        inspectContent.text = inspectTabContent[idx];
+
+        for (int i = 0; i < inspectTabs.Count; i++)
+            ApplyActiveState(inspectTabs[i], i == idx);
+    }
+
+    void HideInspectModal()
+    {
+        if (inspectBackdrop != null) inspectBackdrop.SetActive(false);
+        if (inspectModal    != null) inspectModal.SetActive(false);
     }
 
     // ── Info text builders ────────────────────────────────────────────────────
@@ -419,21 +556,62 @@ public class GameUIManager : MonoBehaviour
 
         if (b is ResidentialBuilding res)
         {
-            sb.AppendLine("Type: Residential");
-            sb.AppendLine($"Quality:  {NeedsBar(b.quality)} {b.quality:0}%");
-            sb.AppendLine($"Treasury: ${b.treasury}");
-            sb.AppendLine($"On Fire:  {(b.isOnFire ? "YES  !" : "No")}");
-            sb.AppendLine();
-            // Occupant list
+            // Tally totals
             int totalOccupants = 0;
+            int totalBedrooms  = 0;
             foreach (var unit in res.DwellingUnits)
             {
                 totalOccupants += unit.DwellingOccupancy.Count;
-                foreach (Agent occupant in unit.DwellingOccupancy)
-                    sb.AppendLine($"  {occupant.agentName}");
-                sb.AppendLine($"  Pantry: {unit.pantry.Get(ItemType.Groceries)} groceries");
+                totalBedrooms  += unit.NumberOfBedrooms;
             }
-            if (totalOccupants == 0) sb.AppendLine("  (vacant)");
+
+            // Headline row – bedrooms + occupancy at a glance
+            string occStr = totalOccupants == 0
+                ? "VACANT"
+                : $"{totalOccupants} resident{(totalOccupants == 1 ? "" : "s")}";
+            sb.AppendLine($"{totalBedrooms} bed  ·  {occStr}");
+            sb.AppendLine($"Quality: {NeedsBar(b.quality)} {b.quality:0}%");
+            sb.AppendLine($"Treasury: ${b.treasury}");
+            if (b.isOnFire) sb.AppendLine("*** ON FIRE ***");
+            sb.AppendLine();
+
+            // Per-unit detail
+            foreach (var unit in res.DwellingUnits)
+            {
+                if (res.DwellingUnits.Count > 1)
+                    sb.AppendLine($"── Unit ({unit.NumberOfBedrooms} bed) ──────────");
+
+                if (unit.DwellingOccupancy.Count == 0)
+                {
+                    sb.AppendLine("  (vacant)");
+                }
+                else
+                {
+                    // Family name / type header
+                    Family fam = unit.DwellingOccupancy[0].family;
+                    if (fam != null)
+                        sb.AppendLine($"  {fam.familyName} family · {FormatFamilyType(fam.familyType)}");
+
+                    // Each resident on their own line
+                    foreach (Agent occupant in unit.DwellingOccupancy)
+                    {
+                        string firstName = occupant.agentName.Contains(' ')
+                            ? occupant.agentName.Split(' ')[0]
+                            : occupant.agentName;
+                        string roleTag = occupant.familyRole switch {
+                            FamilyRole.Head    => "Head",
+                            FamilyRole.Partner => "Partner",
+                            FamilyRole.Child   => "Child",
+                            _                  => occupant.familyRole.ToString()
+                        };
+                        sb.AppendLine($"  {firstName}  {FormatLifeStage(occupant.lifeStage)}, {occupant.ageInYears}  [{roleTag}]");
+                    }
+                }
+
+                sb.AppendLine($"  Pantry: {unit.pantry.Get(ItemType.Groceries)} groceries");
+                sb.AppendLine($"  Rent:   ${unit.rentPerDay}/day");
+                sb.AppendLine();
+            }
         }
         else if (b is CommercialBuilding com)
         {
@@ -469,20 +647,69 @@ public class GameUIManager : MonoBehaviour
     string AgentInfoText(Agent a)
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine(a.agentName);
+
+        // Identity
+        sb.AppendLine($"{FormatLifeStage(a.lifeStage)}, {a.ageInYears}");
         sb.AppendLine("──────────────────────");
-        sb.AppendLine($"State: {a.currentState}");
+
+        // Family
+        if (a.family != null)
+        {
+            sb.AppendLine($"{a.family.familyName} family · {FormatFamilyType(a.family.familyType)}");
+            sb.AppendLine($"Role: {a.familyRole}");
+            foreach (Agent m in a.family.members)
+            {
+                if (m == a) continue;
+                sb.AppendLine($"  {m.agentName} ({m.familyRole})");
+            }
+        }
+        else
+        {
+            sb.AppendLine("No family");
+        }
+
         sb.AppendLine();
+
+        // Needs
         sb.AppendLine($"Hunger:  {NeedsBar(a.hunger)}  {a.hunger:0}%");
         sb.AppendLine($"Lonely:  {NeedsBar(a.loneliness)}  {a.loneliness:0}%");
         sb.AppendLine();
+
+        // Finances & employment
         sb.AppendLine($"Balance: ${a.bankBalance}");
         sb.AppendLine($"Job:     {(a.hasJob && a.employer != null ? a.employer.buildingName : "None")}");
         sb.AppendLine($"Home:    {(a.hasHome ? $"({a.homeTile.x},{a.homeTile.y})" : "None")}");
         sb.AppendLine();
+
+        // State & traits
+        sb.AppendLine($"State:   {a.currentState}");
         sb.Append($"Traits:  {a.personality}");
         return sb.ToString();
     }
+
+    static string FormatLifeStage(LifeStage stage) => stage switch
+    {
+        LifeStage.Baby           => "Baby",
+        LifeStage.Toddler        => "Toddler",
+        LifeStage.YoungChild     => "Young Child",
+        LifeStage.OlderChild     => "Older Child",
+        LifeStage.Teen           => "Teen",
+        LifeStage.Adult          => "Adult",
+        LifeStage.Elder          => "Elder",
+        LifeStage.VenerableElder => "Venerable Elder",
+        _                        => stage.ToString()
+    };
+
+    static string FormatFamilyType(FamilyType type) => type switch
+    {
+        FamilyType.Solo          => "Solo",
+        FamilyType.YoungCouple   => "Young Couple",
+        FamilyType.SmallFamily   => "Small Family",
+        FamilyType.LargeFamily   => "Large Family",
+        FamilyType.RetiredCouple => "Retired Couple",
+        FamilyType.SingleParent  => "Single Parent",
+        _                        => type.ToString()
+    };
 
     /// Returns an 8-char block bar for a 0–100 value.
     string NeedsBar(float val, float max = 100f, int width = 8)

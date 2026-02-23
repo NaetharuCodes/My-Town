@@ -69,4 +69,28 @@ public class ResidentialBuilding : Building
         return false;
     }
 
+    // Finds the best vacant unit for a family of the given size.
+    // Prefers a unit with enough bedrooms; falls back to any vacant unit.
+    public DwellingUnit FindBestVacantUnit(int familySize)
+    {
+        DwellingUnit fallback = null;
+        foreach (DwellingUnit unit in DwellingUnits)
+        {
+            if (unit.DwellingOccupancy.Count > 0) continue;
+            if (unit.NumberOfBedrooms >= familySize) return unit;
+            if (fallback == null) fallback = unit;
+        }
+        return fallback;
+    }
+
+    // Assigns all family members to the given dwelling unit.
+    public void AssignFamily(Family family, DwellingUnit unit)
+    {
+        foreach (Agent member in family.members)
+        {
+            unit.DwellingOccupancy.Add(member);
+            member.AssignHome(gridPosition, unit);
+        }
+    }
+
 }

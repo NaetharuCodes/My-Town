@@ -498,6 +498,7 @@ MonoBehaviour:
   parkTile: {fileID: 11400000, guid: 0a2528e8f15befa4a8a7154dba5578c3, type: 2}
   policeStationTile: {fileID: 11400000, guid: ff74de81c32959b4e8f40bcac30b273e, type: 2}
   fireStationTile: {fileID: 11400000, guid: e7e7cec9cb932414a87c62e89b9036b4, type: 2}
+  arrivalPointTile: {fileID: 11400000, guid: cd9a3f92b1f879b49a8eba3a88eee152, type: 2}
   buildingManager: {fileID: 892924912}
 --- !u!4 &774972512
 Transform:
@@ -679,8 +680,95 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 653497588}
+  - {fileID: 2131429556}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1365668947
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1365668949}
+  - component: {fileID: 1365668948}
+  - component: {fileID: 1365668950}
+  - component: {fileID: 1365668951}
+  m_Layer: 0
+  m_Name: GameUI
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1365668948
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1365668947}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a90e8cce84ada7d4bbdee9c57eee385f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GameUIManager
+  timeManager: {fileID: 0}
+  buildingPlacer: {fileID: 0}
+  selectionManager: {fileID: 0}
+  roadIcon: {fileID: -7011661911796687584, guid: cebedc63be36aac489f51d7ef85605f1, type: 3}
+  houseIcon: {fileID: -7411974349392773033, guid: ec4d7a843b6545247992c15c5134ae2a, type: 3}
+  burgerStoreIcon: {fileID: -8688215184855571159, guid: cc1d5002104d2104bb9b9f735451cfca, type: 3}
+  supermarketIcon: {fileID: -6713563379527142732, guid: 09ee27b7e2899ab47bee7366e6ca22ca, type: 3}
+  officeIcon: {fileID: -1272677867225930765, guid: c3da52f636e52a7429ca6eb91f6968be, type: 3}
+  parkIcon: {fileID: -734796840722011684, guid: e83ab5effa5944d4d98fd302b6106ed7, type: 3}
+  policeStationIcon: {fileID: -7275553061605418226, guid: 02f675d431b506343b7c9b6d7ea0ce4e, type: 3}
+  fireStationIcon: {fileID: 1580172224368002949, guid: 59c7362f7665cf446a1c40c29fb33836, type: 3}
+  arrivalPointIcon: {fileID: 0}
+--- !u!4 &1365668949
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1365668947}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 680.27234, y: 324.43015, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1365668950
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1365668947}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3eec1853082b3f4ba871f53788d6081, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SelectionManager
+  buildingsTilemap: {fileID: 0}
+  buildingManager: {fileID: 0}
+  buildingPlacer: {fileID: 0}
+  agentClickRadius: 0.6
+--- !u!114 &1365668951
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1365668947}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4435c1c3d8c8b54eb58bc611f9959c7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EventLog
 --- !u!1 &1594347586
 GameObject:
   m_ObjectHideFlags: 0
@@ -935,6 +1023,56 @@ Tilemap:
     e31: 0
     e32: 0
     e33: 1
+--- !u!1 &2131429555
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2131429556}
+  - component: {fileID: 2131429557}
+  m_Layer: 0
+  m_Name: ArrivalManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2131429556
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2131429555}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 675.37714, y: 329.48727, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1149037308}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2131429557
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2131429555}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a56feb3c563e2bc4298775bfb435f1f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ArrivalManager
+  agentManager: {fileID: 653497587}
+  buildingManager: {fileID: 892924912}
+  arrivalChance: 0.55
+  maxFamiliesPerTransport: 40
+  maxPopulation: 5000
+  maxHomelessBeforeStop: 50
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -947,3 +1085,4 @@ SceneRoots:
   - {fileID: 641471266}
   - {fileID: 1086190579}
   - {fileID: 129428470}
+  - {fileID: 1365668949}

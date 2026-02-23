@@ -9,6 +9,7 @@ public class SaveData
     public TimeSaveData time = new TimeSaveData();
     public List<BuildingSaveData> buildings = new List<BuildingSaveData>();
     public List<AgentSaveData> agents = new List<AgentSaveData>();
+    public List<FamilySaveData> families = new List<FamilySaveData>();
 }
 
 [System.Serializable]
@@ -52,7 +53,24 @@ public class AgentSaveData
     public int employerY;
     public int carriedGroceries;
 
+    // Life stage & age
+    public string lifeStage = "Adult"; // LifeStage enum name
+    public int ageInYears = 25;
+
+    // Family membership — used to reconnect family on load
+    public string familyId;   // matches FamilySaveData.familyId
+    public string familyRole = "Head"; // FamilyRole enum name
+
     // Personality traits — stored as parallel lists for JsonUtility compatibility.
     public List<string> traitKeys   = new List<string>();
     public List<int>    traitValues = new List<int>();
+}
+
+[System.Serializable]
+public class FamilySaveData
+{
+    public string familyId;
+    public string familyName;
+    public string familyType;         // FamilyType enum name
+    public List<string> memberNames = new List<string>(); // for reference / debugging
 }

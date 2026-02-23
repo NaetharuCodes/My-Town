@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 using UnityEngine.InputSystem;
@@ -19,6 +20,7 @@ public class BuildingPlacer : MonoBehaviour
     public TileBase parkTile;
     public TileBase policeStationTile;
     public TileBase fireStationTile;
+    public TileBase arrivalPointTile;
 
     [Header("References")]
     public BuildingManager buildingManager;
@@ -26,6 +28,8 @@ public class BuildingPlacer : MonoBehaviour
     private TileBase selectedTile;
     private Camera cam;
     private Vector3Int lastDragCell = new Vector3Int(int.MinValue, int.MinValue, int.MinValue);
+
+    public bool DeleteModeActive { get; private set; }
 
     void Start()
     {
@@ -38,8 +42,22 @@ public class BuildingPlacer : MonoBehaviour
         {
             if (selectedTile != null)
                 SelectTile(null, "None");
+            else if (DeleteModeActive)
+                SetDeleteMode(false);
             else
                 SceneManager.LoadScene("MainMenu");
+        }
+
+        // Delete mode click
+        if (DeleteModeActive && Mouse.current.leftButton.wasPressedThisFrame)
+        {
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+                return;
+
+            Vector3 worldPos = cam.ScreenToWorldPoint(Mouse.current.position.ReadValue());
+            worldPos.z = 0f;
+            DeleteTileAt(buildingsTilemap.WorldToCell(worldPos));
+            return;
         }
 
         if (Mouse.current.leftButton.isPressed && selectedTile != null)
@@ -76,6 +94,48 @@ public class BuildingPlacer : MonoBehaviour
         selectedTile = tile;
     }
 
+    public void SetDeleteMode(bool active)
+    {
+        DeleteModeActive = active;
+        if (active) SelectTile(null, "None"); // clear any placed-tile selection
+    }
+
+    void DeleteTileAt(Vector3Int cellPos)
+    {
+        Building building = buildingManager.GetBuildingAt(cellPos);
+        if (building == null)
+        {
+            // May be a road or other bare tile with no Building component
+            if (buildingsTilemap.GetTile(cellPos) != null)
+            {
+                buildingsTilemap.SetTile(cellPos, null);
+                EventLog.Log("Demolished road.");
+            }
+            return;
+        }
+
+        // Notify residents/workers before the building is destroyed
+        if (building is ResidentialBuilding res)
+        {
+            foreach (var unit in res.DwellingUnits)
+                foreach (Agent a in new List<Agent>(unit.DwellingOccupancy))
+                    a.ClearHome();
+        }
+        else if (building is CommercialBuilding com)
+        {
+            foreach (var shift in com.shifts)
+                foreach (Agent a in new List<Agent>(shift.AssignedWorkers))
+                    a.LoseJob();
+        }
+
+        string name = building.buildingName;
+        buildingManager.DeregisterBuilding(cellPos);
+        buildingsTilemap.SetTile(cellPos, null);
+        Destroy(building.gameObject);
+
+        EventLog.Log($"Demolished {name}.");
+    }
+
     void PlaceTile(Vector3Int cellPos)
     {
         TileBase terrainAtPos = terrainTilemap.GetTile(cellPos);
@@ -104,6 +164,7 @@ public class BuildingPlacer : MonoBehaviour
             ResidentialBuilding building = new GameObject("House").AddComponent<ResidentialBuilding>();
             building.gridPosition = cellPos;
             DwellingUnit unit = new DwellingUnit();
+            unit.NumberOfBedrooms = Random.Range(2, 6); // 2–5 bedrooms for natural family size variety
             building.DwellingUnits.Add(unit);
             buildingManager.RegisterBuilding(building);
         }
@@ -142,6 +203,12 @@ public class BuildingPlacer : MonoBehaviour
             FireStation station = new GameObject("FireStation").AddComponent<FireStation>();
             station.gridPosition = cellPos;
             buildingManager.RegisterBuilding(station);
+        }
+        else if (selectedTile == arrivalPointTile)
+        {
+            ArrivalPoint point = new GameObject("ArrivalPoint").AddComponent<ArrivalPoint>();
+            point.gridPosition = cellPos;
+            buildingManager.RegisterBuilding(point);
         }
     }
 }

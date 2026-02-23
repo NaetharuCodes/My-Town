@@ -6,6 +6,10 @@ public class Agent : MonoBehaviour
 {
     [Header("Identity")]
     public string agentName;
+    public LifeStage lifeStage = LifeStage.Adult;
+    public int ageInYears = 25;
+    public Family family;
+    public FamilyRole familyRole = FamilyRole.Head;
 
     [Header("Personality")]
     public Personality personality = new Personality();
@@ -78,12 +82,12 @@ public class Agent : MonoBehaviour
 
     // Cached routes for key destinations (home, work) so A* only runs once per route.
     // Keyed by destination; stores the origin so we only use the cache on matching starts.
-    // Future: expose which destinations count as "key" via a UI toggle.
     private readonly Dictionary<Vector3Int, (Vector3Int from, List<Vector3Int> path)> routeCache
         = new Dictionary<Vector3Int, (Vector3Int, List<Vector3Int>)>();
 
     private Inventory carriedItems = new Inventory();
     private DwellingUnit homeDwelling;
+    public DwellingUnit HomeDwelling => homeDwelling;
 
     private AgentManager agentManager;
     private BuildingManager buildingManager;
@@ -91,17 +95,44 @@ public class Agent : MonoBehaviour
     private Tilemap buildingsTilemap;
     private TimeManager timeManager;
 
+    // --- Life stage capability helpers ---
+    public bool CanSeekWork()    => lifeStage == LifeStage.Adult;
+    public bool CanShopAlone()   => lifeStage >= LifeStage.Teen;
+    public bool CanCookAlone()   => lifeStage >= LifeStage.YoungChild;
+    public bool CanVisitPark()   => lifeStage >= LifeStage.YoungChild;
+    public bool NeedsParentFeed() => lifeStage == LifeStage.Baby || lifeStage == LifeStage.Toddler;
+
     // --- Inventory API (used by stores) ---
     public void AddToInventory(ItemType type, int count = 1) => carriedItems.Add(type, count);
     public int CarriedCount(ItemType type) => carriedItems.Get(type);
 
-    public void Initialise(AgentManager manager, Pathfinder pf, Tilemap buildings, BuildingManager bm)
+    public void Initialise(AgentManager manager, Pathfinder pf, Tilemap buildings, BuildingManager bm,
+                           LifeStage stage = LifeStage.Adult, int age = 25)
     {
         agentManager = manager;
         pathfinder = pf;
         buildingsTilemap = buildings;
         buildingManager = bm;
+        lifeStage = stage;
+        ageInYears = age;
         bankBalance = Random.Range(200, 500);
+        ApplyLifeStageRates();
+    }
+
+    void ApplyLifeStageRates()
+    {
+        switch (lifeStage)
+        {
+            case LifeStage.Baby:
+                hungerRate = 0.15f;
+                lonelinessRate = 0f;
+                break;
+            case LifeStage.Toddler:
+                hungerRate = 0.25f;
+                lonelinessRate = 0.05f;
+                break;
+            // YoungChild through VenerableElder use the default rates set in the Inspector
+        }
     }
 
     void Start()
@@ -164,16 +195,31 @@ public class Agent : MonoBehaviour
         if (thinkTimer > 0f) return;
         thinkTimer = ThinkInterval;
 
-        // Priority 1: work — shift takes precedence over everything.
-        if (hasJob && assignedShift != null && timeManager != null)
+        // Babies and toddlers are entirely dependent on their parents — they just stay home.
+        if (NeedsParentFeed())
+        {
+            if (hasHome)
+            {
+                Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
+                if (currentCell != homeTile)
+                {
+                    if (StartPathTo(homeTile))
+                        currentState = AgentState.WalkingHome;
+                }
+            }
+            return;
+        }
+
+        // Priority 1: work — shift takes precedence over everything. Adults only.
+        if (CanSeekWork() && hasJob && employer != null && assignedShift != null && timeManager != null)
         {
             if (assignedShift.IsActiveAt(timeManager.CurrentHour))
             {
                 Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
                 if (currentCell != employer.gridPosition)
                 {
-                    StartPathTo(employer.gridPosition);
-                    currentState = AgentState.WalkingToWork;
+                    if (StartPathTo(employer.gridPosition))
+                        currentState = AgentState.WalkingToWork;
                 }
                 else
                 {
@@ -190,10 +236,10 @@ public class Agent : MonoBehaviour
             }
         }
 
-        // Priority 2: hunger — prefer cooking at home if pantry is stocked.
+        // Priority 2: hunger — prefer cooking at home if pantry is stocked and old enough to cook.
         if (hunger >= hungerThreshold)
         {
-            if (homeDwelling != null && homeDwelling.pantry.Has(ItemType.Groceries))
+            if (CanCookAlone() && homeDwelling != null && homeDwelling.pantry.Has(ItemType.Groceries))
             {
                 Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
                 if (currentCell == homeTile)
@@ -205,13 +251,13 @@ public class Agent : MonoBehaviour
                 else
                 {
                     // Walk home to cook rather than going out.
-                    StartPathTo(homeTile);
-                    currentState = AgentState.WalkingHome;
+                    if (StartPathTo(homeTile))
+                        currentState = AgentState.WalkingHome;
                 }
                 return;
             }
 
-            // No pantry stock — only go out if somewhere is open.
+            // No pantry stock (or can't cook) — only go out if somewhere is open.
             Vector3Int cell = buildingsTilemap.WorldToCell(transform.position);
             bool eateryOpen = buildingManager.FindNearest<BurgerStore>(cell, b => b.IsOpen()).HasValue;
             if (eateryOpen)
@@ -227,9 +273,13 @@ public class Agent : MonoBehaviour
             Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
             if (currentCell != homeTile)
             {
-                StartPathTo(homeTile);
-                currentState = AgentState.WalkingHome;
-                return;
+                if (StartPathTo(homeTile))
+                {
+                    currentState = AgentState.WalkingHome;
+                    return;
+                }
+                // Home is unreachable from here — release it so the agent can seek a new one.
+                ClearHome();
             }
         }
 
@@ -240,8 +290,8 @@ public class Agent : MonoBehaviour
             return;
         }
 
-        // Priority 5: restock pantry if running low.
-        if (homeDwelling != null && homeDwelling.pantry.Get(ItemType.Groceries) < pantryRestockThreshold)
+        // Priority 5: restock pantry if running low. Shopping requires being old enough.
+        if (CanShopAlone() && homeDwelling != null && homeDwelling.pantry.Get(ItemType.Groceries) < pantryRestockThreshold)
         {
             Vector3Int cell = buildingsTilemap.WorldToCell(transform.position);
             bool supermarketOpen = buildingManager.FindNearest<Supermarket>(cell, b => b.IsOpen()).HasValue;
@@ -253,7 +303,7 @@ public class Agent : MonoBehaviour
         }
 
         // Priority 6: social — visit a park if lonely.
-        if (loneliness >= lonelinessThreshold)
+        if (CanVisitPark() && loneliness >= lonelinessThreshold)
         {
             Vector3Int cell = buildingsTilemap.WorldToCell(transform.position);
             if (buildingManager.FindNearest<Park>(cell).HasValue)
@@ -263,8 +313,8 @@ public class Agent : MonoBehaviour
             }
         }
 
-        // Priority 7: find a job.
-        if (!hasJob)
+        // Priority 7: find a job. Adults only.
+        if (CanSeekWork() && !hasJob)
         {
             currentState = AgentState.SeekingWork;
             return;
@@ -273,20 +323,53 @@ public class Agent : MonoBehaviour
 
     void HandleSeekingHome()
     {
+        // If part of a family, check whether another member already has a home — join their dwelling.
+        if (family != null)
+        {
+            foreach (Agent member in family.members)
+            {
+                if (member == this || !member.hasHome) continue;
+
+                // Join their dwelling unit directly.
+                DwellingUnit sharedUnit = member.HomeDwelling;
+                if (sharedUnit != null && !sharedUnit.DwellingOccupancy.Contains(this))
+                {
+                    AssignHome(member.homeTile, sharedUnit);
+                    if (StartPathTo(homeTile))
+                    {
+                        sharedUnit.DwellingOccupancy.Add(this);
+                        currentState = AgentState.WalkingHome;
+                        return;
+                    }
+                    // Can't reach sibling's home — clear and fall through to find own
+                    hasHome = false;
+                    homeTile = Vector3Int.zero;
+                    homeDwelling = null;
+                }
+            }
+        }
+
+        // No family or no housed family member — find the best available unit.
+        int neededBedrooms = family != null ? family.members.Count : 1;
         Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
 
         foreach (Vector3Int home in buildingManager.FindAvailableHomes())
         {
-            var path = pathfinder.FindPath(currentCell, home);
-            if (path == null) continue; // not reachable from here — try next home
-
             Building building = buildingManager.GetBuildingAt(home);
-            if (building is ResidentialBuilding residential && residential.Interact(this))
-            {
-                StartFollowingPath(path);
-                currentState = AgentState.WalkingHome;
-                return;
-            }
+            if (building is not ResidentialBuilding residential) continue;
+
+            DwellingUnit unit = residential.FindBestVacantUnit(neededBedrooms);
+            if (unit == null) continue;
+
+            var path = pathfinder.FindPath(currentCell, home);
+            if (path == null) continue;
+
+            // Assign this agent (family members will join via the sibling check above).
+            unit.DwellingOccupancy.Add(this);
+            AssignHome(home, unit);
+            StartFollowingPath(path);
+            currentState = AgentState.WalkingHome;
+            return;
         }
 
         // No reachable home found this cycle — try again later.
@@ -360,8 +443,10 @@ public class Agent : MonoBehaviour
         {
             if (hasHome)
             {
-                StartPathTo(homeTile);
-                currentState = AgentState.WalkingHome;
+                if (StartPathTo(homeTile))
+                    currentState = AgentState.WalkingHome;
+                else
+                    currentState = AgentState.Idle;
             }
             else
                 currentState = AgentState.Idle;
@@ -376,6 +461,14 @@ public class Agent : MonoBehaviour
             if (homeDwelling != null && homeDwelling.pantry.Remove(ItemType.Groceries))
             {
                 Feed(cookingHungerRestored);
+
+                // Also feed babies and toddlers in the same dwelling — they can't feed themselves.
+                foreach (Agent occupant in homeDwelling.DwellingOccupancy)
+                {
+                    if (occupant != this && occupant.NeedsParentFeed())
+                        occupant.Feed(cookingHungerRestored * 0.8f);
+                }
+
                 Debug.Log($"{agentName} cooked and ate at home. Pantry has {homeDwelling.pantry.Get(ItemType.Groceries)} groceries left.");
             }
             currentState = AgentState.Idle;
@@ -409,8 +502,10 @@ public class Agent : MonoBehaviour
             Debug.Log($"{agentName} enjoyed the park. Loneliness: {loneliness:0}");
             if (hasHome)
             {
-                StartPathTo(homeTile);
-                currentState = AgentState.WalkingHome;
+                if (StartPathTo(homeTile))
+                    currentState = AgentState.WalkingHome;
+                else
+                    currentState = AgentState.Idle;
             }
             else
                 currentState = AgentState.Idle;
@@ -596,7 +691,8 @@ public class Agent : MonoBehaviour
         return false;
     }
 
-    void StartPathTo(Vector3Int target)
+    // Returns true if a path was found and movement started; false if the destination is unreachable.
+    bool StartPathTo(Vector3Int target)
     {
         Vector3Int from = buildingsTilemap.WorldToCell(transform.position);
 
@@ -606,7 +702,7 @@ public class Agent : MonoBehaviour
             cached.from == from)
         {
             StartFollowingPath(new List<Vector3Int>(cached.path));
-            return;
+            return true;
         }
 
         var path = pathfinder.FindPath(from, target);
@@ -615,7 +711,9 @@ public class Agent : MonoBehaviour
             if (IsKeyDestination(target))
                 routeCache[target] = (from, new List<Vector3Int>(path));
             StartFollowingPath(path);
+            return true;
         }
+        return false;
     }
 
     void StartFollowingPath(List<Vector3Int> path)
@@ -694,6 +792,7 @@ public class Agent : MonoBehaviour
         switch (currentState)
         {
             case AgentState.WalkingToWork:
+                if (employer == null) { currentState = AgentState.Idle; break; }
                 employer.WorkerCheckIn(this);
                 if (employer is PoliceStation || employer is FireStation)
                 {
@@ -723,8 +822,10 @@ public class Agent : MonoBehaviour
                 Building market = buildingManager.GetBuildingAt(groceryTile);
                 if (market != null)
                     market.Interact(this); // Groceries land in carriedItems; success or not, head home
-                StartPathTo(homeTile);
-                currentState = AgentState.WalkingHome;
+                if (StartPathTo(homeTile))
+                    currentState = AgentState.WalkingHome;
+                else
+                    currentState = AgentState.Idle;
                 break;
 
             case AgentState.WalkingHome:
@@ -794,6 +895,38 @@ public class Agent : MonoBehaviour
         homeTile = tile;
         homeDwelling = dwelling;
         hasHome = true;
+    }
+
+    /// <summary>
+    /// Evicts this agent from their home. Called when the dwelling is demolished.
+    /// Snaps the agent back to Idle so they immediately seek a new home.
+    /// </summary>
+    public void ClearHome()
+    {
+        if (homeDwelling != null)
+            homeDwelling.DwellingOccupancy.Remove(this);
+        homeTile     = Vector3Int.zero;
+        homeDwelling = null;
+        hasHome      = false;
+        if (currentState == AgentState.WalkingHome ||
+            currentState == AgentState.Cooking)
+            currentState = AgentState.Idle;
+    }
+
+    /// <summary>
+    /// Fires this agent from their job. Called when the workplace is demolished.
+    /// Snaps the agent back to Idle so they immediately seek new work.
+    /// </summary>
+    public void LoseJob()
+    {
+        if (assignedShift != null)
+            assignedShift.Unassign(this);
+        employer      = null;
+        assignedShift = null;
+        hasJob        = false;
+        if (currentState == AgentState.WalkingToWork ||
+            currentState == AgentState.Working)
+            currentState = AgentState.Idle;
     }
 
     public void Feed(float amount)
