@@ -43,6 +43,11 @@ public class AgentManager : MonoBehaviour
         families.Add(family);
     }
 
+    public void RemoveAgent(Agent agent)
+    {
+        agents.Remove(agent);
+    }
+
     public void DespawnAll()
     {
         foreach (Agent agent in agents)

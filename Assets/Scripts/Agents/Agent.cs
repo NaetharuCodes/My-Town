@@ -66,6 +66,10 @@ public class Agent : MonoBehaviour
     public float cookingHungerRestored = 80f;
     public int pantryRestockThreshold = 2; // Go grocery shopping if pantry drops below this
 
+    [Header("Homeless Behaviour")]
+    [Tooltip("Real seconds an agent will wait for housing before leaving town.")]
+    public float homelessLeaveTime = 120f;
+
     // Internal
     private List<Vector3Int> currentPath;
     private Vector3Int foodTile;
@@ -79,6 +83,9 @@ public class Agent : MonoBehaviour
     private bool isMoving = false;
     private float thinkTimer = 0f;
     private const float ThinkInterval = 5f; // seconds between Idle priority evaluations
+    private float homelessTimer = 0f;       // total time spent without a home
+    private float homelessRetryTimer = 0f;  // countdown to next home-search attempt
+    private const float HomelessRetryInterval = 3f; // re-check every 3 s when homeless
 
     // Cached routes for key destinations (home, work) so A* only runs once per route.
     // Keyed by destination; stores the origin so we only use the cache on matching starts.
@@ -162,6 +169,16 @@ public class Agent : MonoBehaviour
         hunger    = Mathf.Min(hunger    + hungerRate    * Time.deltaTime, 100f);
         loneliness = Mathf.Min(loneliness + lonelinessRate * Time.deltaTime, 100f);
 
+        if (!hasHome)
+        {
+            homelessTimer += Time.deltaTime;
+            if (homelessTimer >= homelessLeaveTime)
+            {
+                LeaveTown();
+                return;
+            }
+        }
+
         if (isMoving)
         {
             MoveAlongPath();
@@ -191,6 +208,20 @@ public class Agent : MonoBehaviour
 
     void HandleIdle()
     {
+        // When homeless, re-check for housing on its own fast timer, independent of thinkTimer.
+        // This ensures a newly built house is noticed within a few seconds rather than up to
+        // ThinkInterval seconds later.
+        if (!hasHome)
+        {
+            homelessRetryTimer -= Time.deltaTime;
+            if (homelessRetryTimer <= 0f)
+            {
+                homelessRetryTimer = HomelessRetryInterval;
+                currentState = AgentState.SeekingHome;
+                return;
+            }
+        }
+
         thinkTimer -= Time.deltaTime;
         if (thinkTimer > 0f) return;
         thinkTimer = ThinkInterval;
@@ -283,12 +314,7 @@ public class Agent : MonoBehaviour
             }
         }
 
-        // Priority 4: find a home.
-        if (!hasHome)
-        {
-            currentState = AgentState.SeekingHome;
-            return;
-        }
+        // Priority 4: find a home (handled above via homelessRetryTimer; skip here).
 
         // Priority 5: restock pantry if running low. Shopping requires being old enough.
         if (CanShopAlone() && homeDwelling != null && homeDwelling.pantry.Get(ItemType.Groceries) < pantryRestockThreshold)
@@ -895,6 +921,8 @@ public class Agent : MonoBehaviour
         homeTile = tile;
         homeDwelling = dwelling;
         hasHome = true;
+        homelessTimer = 0f;
+        homelessRetryTimer = 0f;
     }
 
     /// <summary>
@@ -908,6 +936,7 @@ public class Agent : MonoBehaviour
         homeTile     = Vector3Int.zero;
         homeDwelling = null;
         hasHome      = false;
+        homelessRetryTimer = 0f; // start re-checking immediately
         if (currentState == AgentState.WalkingHome ||
             currentState == AgentState.Cooking)
             currentState = AgentState.Idle;
@@ -932,6 +961,18 @@ public class Agent : MonoBehaviour
     public void Feed(float amount)
     {
         hunger = Mathf.Max(hunger - amount, 0f);
+    }
+
+    void LeaveTown()
+    {
+        EventLog.Log($"{agentName} gave up waiting for housing and left town.");
+        Debug.Log($"{agentName} leaving town — homeless for {homelessTimer:0}s.");
+        if (family != null)
+            family.members.Remove(this);
+        if (homeDwelling != null)
+            homeDwelling.DwellingOccupancy.Remove(this);
+        agentManager.RemoveAgent(this);
+        Destroy(gameObject);
     }
 
     public void ChargeRent(int amount)
