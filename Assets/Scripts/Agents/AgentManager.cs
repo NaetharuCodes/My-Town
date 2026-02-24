@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
-using UnityEngine.InputSystem;
 
 public class AgentManager : MonoBehaviour
 {
@@ -13,38 +12,48 @@ public class AgentManager : MonoBehaviour
     public GameObject agentPrefab;
 
     private List<Agent> agents = new List<Agent>();
+    public List<Family> families = new List<Family>();
 
-    void Update()
-    {
-        if (Keyboard.current.spaceKey.wasPressedThisFrame)
-        {
-            Vector3 worldPos = Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue());
-            Vector3Int cellPos = buildingsTilemap.WorldToCell(worldPos);
-            SpawnAgent(cellPos);
-        }
-    }
+    public IReadOnlyList<Agent> GetAllAgents() => agents;
 
-    public void SpawnAgent(Vector3Int spawnTile)
+    // Spawns a family member at the given tile, wires up family/role/life stage, and names them.
+    public Agent SpawnFamilyMember(Vector3Int spawnTile, Family family, LifeStage stage,
+                                   FamilyRole role, string familyLastName)
     {
-        Vector3 worldPos = buildingsTilemap.CellToWorld(spawnTile)
-                           + new Vector3(0.5f, 0.5f, 0f);
+        Vector3 worldPos = buildingsTilemap.CellToWorld(spawnTile) + new Vector3(0.5f, 0.5f, 0f);
 
         GameObject agentObj = Instantiate(agentPrefab, worldPos, Quaternion.identity);
         Agent agent = agentObj.GetComponent<Agent>();
-        agent.agentName = GenerateName();
-        agent.Initialise(this, FindFirstObjectByType<Pathfinder>(), buildingsTilemap, buildingManager);
+
+        agent.agentName = $"{GenerateFirstName()} {familyLastName}";
+        agent.familyRole = role;
+        agent.family = family;
+        family.AddMember(agent);
+
+        int age = DefaultAgeFor(stage);
+        agent.Initialise(this, FindFirstObjectByType<Pathfinder>(), buildingsTilemap, buildingManager, stage, age);
 
         AssignRandomPersonality(agent);
         agents.Add(agent);
-        EventLog.Log($"New resident: {agent.agentName}.");
+        return agent;
     }
-    public IReadOnlyList<Agent> GetAllAgents() => agents;
+
+    public void RegisterFamily(Family family)
+    {
+        families.Add(family);
+    }
+
+    public void RemoveAgent(Agent agent)
+    {
+        agents.Remove(agent);
+    }
 
     public void DespawnAll()
     {
         foreach (Agent agent in agents)
             if (agent != null) Destroy(agent.gameObject);
         agents.Clear();
+        families.Clear();
     }
 
     // Spawns an agent from saved data: position and name are restored;
@@ -55,7 +64,14 @@ public class AgentManager : MonoBehaviour
         GameObject agentObj = Instantiate(agentPrefab, worldPos, Quaternion.identity);
         Agent agent = agentObj.GetComponent<Agent>();
         agent.agentName = data.agentName;
-        agent.Initialise(this, FindFirstObjectByType<Pathfinder>(), buildingsTilemap, buildingManager);
+
+        LifeStage stage = System.Enum.TryParse(data.lifeStage, out LifeStage parsed) ? parsed : LifeStage.Adult;
+        agent.Initialise(this, FindFirstObjectByType<Pathfinder>(), buildingsTilemap, buildingManager,
+                         stage, data.ageInYears);
+
+        if (System.Enum.TryParse(data.familyRole, out FamilyRole roleP))
+            agent.familyRole = roleP;
+
         agents.Add(agent);
         return agent;
     }
@@ -72,14 +88,36 @@ public class AgentManager : MonoBehaviour
         }
     }
 
-    string GenerateName()
+    string GenerateFirstName()
     {
-        string[] firstNames = { "James", "Emma", "Oliver", "Sophia", "Liam",
-                                "Ava", "Noah", "Mia", "Jack", "Lily" };
-        string[] lastNames = { "Smith", "Chen", "Patel", "Williams", "Brown",
-                               "Jones", "Garcia", "Miller", "Davis", "Wilson" };
+        string[] names = { "James", "Emma", "Oliver", "Sophia", "Liam",
+                           "Ava", "Noah", "Mia", "Jack", "Lily",
+                           "Ethan", "Chloe", "Lucas", "Grace", "Mason",
+                           "Ella", "Aiden", "Zoe", "Leo", "Ruby" };
+        return names[Random.Range(0, names.Length)];
+    }
 
-        return $"{firstNames[Random.Range(0, firstNames.Length)]} " +
-               $"{lastNames[Random.Range(0, lastNames.Length)]}";
+    public string GenerateLastName()
+    {
+        string[] names = { "Smith", "Chen", "Patel", "Williams", "Brown",
+                           "Jones", "Garcia", "Miller", "Davis", "Wilson",
+                           "Taylor", "Anderson", "Thomas", "Jackson", "White" };
+        return names[Random.Range(0, names.Length)];
+    }
+
+    static int DefaultAgeFor(LifeStage stage)
+    {
+        return stage switch
+        {
+            LifeStage.Baby           => Random.Range(0, 2),
+            LifeStage.Toddler        => Random.Range(2, 5),
+            LifeStage.YoungChild     => Random.Range(5, 10),
+            LifeStage.OlderChild     => Random.Range(10, 13),
+            LifeStage.Teen           => Random.Range(13, 18),
+            LifeStage.Adult          => Random.Range(20, 60),
+            LifeStage.Elder          => Random.Range(65, 80),
+            LifeStage.VenerableElder => Random.Range(80, 101),
+            _                        => 25
+        };
     }
 }

@@ -24,10 +24,14 @@ public class ResidentialBuilding : Building
     {
         foreach (DwellingUnit unit in DwellingUnits)
         {
-            foreach (Agent agent in unit.DwellingOccupancy)
+            // Iterate a copy — eviction modifies DwellingOccupancy mid-loop.
+            foreach (Agent agent in new List<Agent>(unit.DwellingOccupancy))
             {
-                agent.ChargeRent(unit.rentPerDay);
-                treasury += unit.rentPerDay;
+                // Only charge adults; children and dependents are covered by the household.
+                if (!agent.CanSeekWork()) continue;
+
+                if (agent.ChargeRent(unit.rentPerDay))
+                    treasury += unit.rentPerDay;
             }
         }
     }
@@ -67,6 +71,30 @@ public class ResidentialBuilding : Building
                 return true;
         }
         return false;
+    }
+
+    // Finds the best vacant unit for a family of the given size.
+    // Prefers a unit with enough bedrooms; falls back to any vacant unit.
+    public DwellingUnit FindBestVacantUnit(int familySize)
+    {
+        DwellingUnit fallback = null;
+        foreach (DwellingUnit unit in DwellingUnits)
+        {
+            if (unit.DwellingOccupancy.Count > 0) continue;
+            if (unit.NumberOfBedrooms >= familySize) return unit;
+            if (fallback == null) fallback = unit;
+        }
+        return fallback;
+    }
+
+    // Assigns all family members to the given dwelling unit.
+    public void AssignFamily(Family family, DwellingUnit unit)
+    {
+        foreach (Agent member in family.members)
+        {
+            unit.DwellingOccupancy.Add(member);
+            member.AssignHome(gridPosition, unit);
+        }
     }
 
 }
