@@ -21,6 +21,8 @@ public class BuildingPlacer : MonoBehaviour
     public TileBase policeStationTile;
     public TileBase fireStationTile;
     public TileBase arrivalPointTile;
+    public TileBase schoolTile;
+    public TileBase preschoolTile;
 
     [Header("References")]
     public BuildingManager buildingManager;
@@ -209,6 +211,20 @@ public class BuildingPlacer : MonoBehaviour
             ArrivalPoint point = new GameObject("ArrivalPoint").AddComponent<ArrivalPoint>();
             point.gridPosition = cellPos;
             buildingManager.RegisterBuilding(point);
+        }
+        else if (selectedTile == schoolTile)
+        {
+            School school = new GameObject("School").AddComponent<School>();
+            school.gridPosition = cellPos;
+            school.buildingName = "School";
+            buildingManager.RegisterBuilding(school);
+        }
+        else if (selectedTile == preschoolTile)
+        {
+            Preschool preschool = new GameObject("Preschool").AddComponent<Preschool>();
+            preschool.gridPosition = cellPos;
+            preschool.buildingName = "Preschool";
+            buildingManager.RegisterBuilding(preschool);
         }
     }
 }

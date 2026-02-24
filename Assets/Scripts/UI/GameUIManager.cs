@@ -31,6 +31,8 @@ public class GameUIManager : MonoBehaviour
     public Sprite policeStationIcon;
     public Sprite fireStationIcon;
     public Sprite arrivalPointIcon;
+    public Sprite schoolIcon;
+    public Sprite preschoolIcon;
 
     // ── live UI references ────────────────────────────────────────────────────
     private Text       timeText;
@@ -250,8 +252,8 @@ public class GameUIManager : MonoBehaviour
 
         // Building definitions – order matches buildButtons[]
         // Last entry is the Delete (demolish) tool — no tile, no icon.
-        string[] lbls  = { "Road", "House", "Burger Store", "Supermarket", "Office", "Park", "Police", "Fire Stn", "Bus Stop", "Delete" };
-        Sprite[] icons = { roadIcon, houseIcon, burgerStoreIcon, supermarketIcon, officeIcon, parkIcon, policeStationIcon, fireStationIcon, arrivalPointIcon, null };
+        string[] lbls  = { "Road", "House", "Burger Store", "Supermarket", "Office", "Park", "Police", "Fire Stn", "Bus Stop", "School", "Preschool", "Delete" };
+        Sprite[] icons = { roadIcon, houseIcon, burgerStoreIcon, supermarketIcon, officeIcon, parkIcon, policeStationIcon, fireStationIcon, arrivalPointIcon, schoolIcon, preschoolIcon, null };
         TileBase[] tiles = buildingPlacer != null
             ? new TileBase[] {
                 buildingPlacer.roadTile,
@@ -263,8 +265,10 @@ public class GameUIManager : MonoBehaviour
                 buildingPlacer.policeStationTile,
                 buildingPlacer.fireStationTile,
                 buildingPlacer.arrivalPointTile,
+                buildingPlacer.schoolTile,
+                buildingPlacer.preschoolTile,
                 null }
-            : new TileBase[10];
+            : new TileBase[12];
 
         buildButtons = new Button[lbls.Length];
         int deleteIdx = lbls.Length - 1;
@@ -613,6 +617,27 @@ public class GameUIManager : MonoBehaviour
                 sb.AppendLine();
             }
         }
+        else if (b is SchoolBuilding school)
+        {
+            string sessionLabel = (timeManager != null && school.IsInSession(timeManager.CurrentHour))
+                ? "IN SESSION" : "Closed";
+            sb.AppendLine($"Hours:     {school.openHour:00}:00 – {school.closeHour:00}:00");
+            sb.AppendLine($"Status:    {sessionLabel}");
+            sb.AppendLine($"Enrolled:  {school.EnrolledCount} / {school.maxStudents}");
+            sb.AppendLine($"Present:   {school.PresentCount}");
+            sb.AppendLine($"Treasury:  ${b.treasury}");
+            sb.AppendLine($"On Fire:   {(b.isOnFire ? "YES  !" : "No")}");
+            sb.AppendLine();
+            // Teacher shift
+            foreach (var shift in school.shifts)
+            {
+                int endHour = (shift.startHour + shift.durationHours) % 24;
+                sb.AppendLine($"Teachers {shift.startHour:00}:00–{endHour:00}:00");
+                sb.AppendLine($"  Filled: {shift.AssignedWorkers.Count}/{shift.workersRequired}");
+                foreach (Agent w in shift.AssignedWorkers)
+                    sb.AppendLine($"    {w.agentName}");
+            }
+        }
         else if (b is CommercialBuilding com)
         {
             sb.AppendLine($"Type: {b.buildingType}");
@@ -678,6 +703,7 @@ public class GameUIManager : MonoBehaviour
         // Finances & employment
         sb.AppendLine($"Balance: ${a.bankBalance}");
         sb.AppendLine($"Job:     {(a.hasJob && a.employer != null ? a.employer.buildingName : "None")}");
+        sb.AppendLine($"School:  {(a.isEnrolled && a.enrolledSchool != null ? a.enrolledSchool.buildingName : "None")}");
         sb.AppendLine($"Home:    {(a.hasHome ? $"({a.homeTile.x},{a.homeTile.y})" : "None")}");
         sb.AppendLine();
 

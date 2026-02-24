@@ -24,10 +24,14 @@ public class ResidentialBuilding : Building
     {
         foreach (DwellingUnit unit in DwellingUnits)
         {
-            foreach (Agent agent in unit.DwellingOccupancy)
+            // Iterate a copy — eviction modifies DwellingOccupancy mid-loop.
+            foreach (Agent agent in new List<Agent>(unit.DwellingOccupancy))
             {
-                agent.ChargeRent(unit.rentPerDay);
-                treasury += unit.rentPerDay;
+                // Only charge adults; children and dependents are covered by the household.
+                if (!agent.CanSeekWork()) continue;
+
+                if (agent.ChargeRent(unit.rentPerDay))
+                    treasury += unit.rentPerDay;
             }
         }
     }

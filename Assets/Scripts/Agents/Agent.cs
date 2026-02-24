@@ -45,7 +45,6 @@ public class Agent : MonoBehaviour
 
     [Header("Finances")]
     public int bankBalance;
-    public int dailyIncome = 70; // Placeholder — replaced by wage once agent has a job
 
     [Header("State")]
     public AgentState currentState = AgentState.Idle;
@@ -56,6 +55,11 @@ public class Agent : MonoBehaviour
     public bool hasJob = false;
     public CommercialBuilding employer;
     public Shift assignedShift;
+
+    [Header("School")]
+    public bool isEnrolled = false;
+    public SchoolBuilding enrolledSchool;
+    private Vector3Int schoolTile;
 
     [Header("Movement")]
     public float moveSpeed = 3f;
@@ -103,11 +107,13 @@ public class Agent : MonoBehaviour
     private TimeManager timeManager;
 
     // --- Life stage capability helpers ---
-    public bool CanSeekWork()    => lifeStage == LifeStage.Adult;
-    public bool CanShopAlone()   => lifeStage >= LifeStage.Teen;
-    public bool CanCookAlone()   => lifeStage >= LifeStage.YoungChild;
-    public bool CanVisitPark()   => lifeStage >= LifeStage.YoungChild;
-    public bool NeedsParentFeed() => lifeStage == LifeStage.Baby || lifeStage == LifeStage.Toddler;
+    public bool CanSeekWork()       => lifeStage == LifeStage.Adult;
+    public bool CanShopAlone()      => lifeStage >= LifeStage.Teen;
+    public bool CanCookAlone()      => lifeStage >= LifeStage.YoungChild;
+    public bool CanVisitPark()      => lifeStage >= LifeStage.YoungChild;
+    public bool NeedsParentFeed()   => lifeStage == LifeStage.Baby || lifeStage == LifeStage.Toddler;
+    public bool CanAttendSchool()   => lifeStage >= LifeStage.YoungChild && lifeStage <= LifeStage.Teen;
+    public bool CanAttendPreschool() => lifeStage == LifeStage.Toddler;
 
     // --- Inventory API (used by stores) ---
     public void AddToInventory(ItemType type, int count = 1) => carriedItems.Add(type, count);
@@ -145,24 +151,9 @@ public class Agent : MonoBehaviour
     void Start()
     {
         timeManager = FindFirstObjectByType<TimeManager>();
-        if (timeManager != null)
-            timeManager.OnNewDay += ReceiveDailyIncome;
     }
 
-    void OnDestroy()
-    {
-        if (timeManager != null)
-            timeManager.OnNewDay -= ReceiveDailyIncome;
-    }
-
-    void ReceiveDailyIncome(int day)
-    {
-        if (!hasJob)
-        {
-            bankBalance += dailyIncome;
-            Debug.Log($"{agentName} received ${dailyIncome} income. Balance: ${bankBalance}");
-        }
-    }
+    void OnDestroy() { }
 
     void Update()
     {
@@ -203,6 +194,9 @@ public class Agent : MonoBehaviour
             case AgentState.Chasing:           HandleChasing();           break;
             case AgentState.RespondingToFire:  HandleRespondingToFire();  break;
             case AgentState.Extinguishing:     HandleExtinguishing();     break;
+            case AgentState.SeekingSchool:          HandleSeekingSchool();          break;
+            case AgentState.AtSchool:               HandleAtSchool();               break;
+            case AgentState.SeekingHomelessShelter: HandleSeekingHomelessShelter(); break;
         }
     }
 
@@ -226,17 +220,52 @@ public class Agent : MonoBehaviour
         if (thinkTimer > 0f) return;
         thinkTimer = ThinkInterval;
 
-        // Babies and toddlers are entirely dependent on their parents — they just stay home.
+        // Babies stay home entirely — no preschool for infants.
+        if (lifeStage == LifeStage.Baby)
+        {
+            if (hasHome)
+            {
+                Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
+                if (currentCell != homeTile && StartPathTo(homeTile))
+                    currentState = AgentState.WalkingHome;
+            }
+            return;
+        }
+
+        // School/Preschool attendance — highest priority for children, mirrors work priority for adults.
+        if (CanAttendPreschool() || CanAttendSchool())
+        {
+            if (isEnrolled && enrolledSchool != null && timeManager != null
+                && enrolledSchool.IsInSession(timeManager.CurrentHour))
+            {
+                Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
+                if (currentCell != enrolledSchool.gridPosition)
+                {
+                    if (StartPathTo(enrolledSchool.gridPosition))
+                    {
+                        schoolTile = enrolledSchool.gridPosition;
+                        currentState = AgentState.WalkingToSchool;
+                        return;
+                    }
+                    // School is unreachable — fall through to other priorities this tick.
+                }
+                else
+                {
+                    enrolledSchool.StudentArrive(this);
+                    currentState = AgentState.AtSchool;
+                    return;
+                }
+            }
+        }
+
+        // Toddlers outside preschool hours stay home — still need parent feeding.
         if (NeedsParentFeed())
         {
             if (hasHome)
             {
                 Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
-                if (currentCell != homeTile)
-                {
-                    if (StartPathTo(homeTile))
-                        currentState = AgentState.WalkingHome;
-                }
+                if (currentCell != homeTile && StartPathTo(homeTile))
+                    currentState = AgentState.WalkingHome;
             }
             return;
         }
@@ -315,6 +344,12 @@ public class Agent : MonoBehaviour
         }
 
         // Priority 4: find a home (handled above via homelessRetryTimer; skip here).
+        // If still homeless after that check, seek shelter or a park to rest.
+        if (!hasHome)
+        {
+            currentState = AgentState.SeekingHomelessShelter;
+            return;
+        }
 
         // Priority 5: restock pantry if running low. Shopping requires being old enough.
         if (CanShopAlone() && homeDwelling != null && homeDwelling.pantry.Get(ItemType.Groceries) < pantryRestockThreshold)
@@ -343,6 +378,13 @@ public class Agent : MonoBehaviour
         if (CanSeekWork() && !hasJob)
         {
             currentState = AgentState.SeekingWork;
+            return;
+        }
+
+        // Priority 8: seek school/preschool enrollment if not yet enrolled.
+        if ((CanAttendPreschool() || CanAttendSchool()) && !isEnrolled)
+        {
+            currentState = AgentState.SeekingSchool;
             return;
         }
     }
@@ -424,6 +466,52 @@ public class Agent : MonoBehaviour
         }
 
         currentState = AgentState.Idle;
+    }
+
+    void HandleSeekingSchool()
+    {
+        Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
+        SchoolBuilding found = null;
+
+        if (CanAttendPreschool())
+        {
+            Vector3Int? pos = buildingManager.FindNearest<Preschool>(currentCell, s => s.IsEnrollmentOpen());
+            if (pos.HasValue)
+                found = (SchoolBuilding)buildingManager.GetBuildingAt(pos.Value);
+        }
+        else if (CanAttendSchool())
+        {
+            Vector3Int? pos = buildingManager.FindNearest<School>(currentCell, s => s.IsEnrollmentOpen());
+            if (pos.HasValue)
+                found = (SchoolBuilding)buildingManager.GetBuildingAt(pos.Value);
+        }
+
+        if (found != null && found.TryEnroll(this))
+        {
+            enrolledSchool = found;
+            isEnrolled = true;
+            EventLog.Log($"{agentName} enrolled at {found.buildingName}.");
+            Debug.Log($"{agentName} enrolled at {found.buildingName}.");
+        }
+
+        currentState = AgentState.Idle;
+    }
+
+    void HandleAtSchool()
+    {
+        if (enrolledSchool == null || timeManager == null)
+        {
+            currentState = AgentState.Idle;
+            return;
+        }
+        if (!enrolledSchool.IsInSession(timeManager.CurrentHour))
+        {
+            enrolledSchool.StudentLeave(this);
+            if (hasHome && StartPathTo(homeTile))
+                currentState = AgentState.WalkingHome;
+            else
+                currentState = AgentState.Idle;
+        }
     }
 
     void HandleSeekingFood()
@@ -516,6 +604,31 @@ public class Agent : MonoBehaviour
             return;
         }
 
+        currentState = AgentState.Idle;
+    }
+
+    void HandleSeekingHomelessShelter()
+    {
+        Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
+
+        // TODO: when HomelessShelter buildings exist, try those first:
+        // Vector3Int? shelterPos = buildingManager.FindNearest<HomelessShelter>(currentCell);
+        // if (shelterPos.HasValue) { ... }
+
+        // Fallback: find the nearest park to sleep in.
+        foreach (Vector3Int park in buildingManager.FindAllSorted<Park>(currentCell))
+        {
+            var path = pathfinder.FindPath(currentCell, park);
+            if (path == null) continue;
+
+            parkTile = park;
+            StartFollowingPath(path);
+            currentState = AgentState.WalkingToPark;
+            return;
+        }
+
+        // No shelter or park reachable — sleep rough where they stand.
+        Debug.Log($"{agentName} is sleeping rough — no shelter found.");
         currentState = AgentState.Idle;
     }
 
@@ -714,6 +827,7 @@ public class Agent : MonoBehaviour
     {
         if (hasHome && dest == homeTile) return true;
         if (hasJob && dest == employer.gridPosition) return true;
+        if (isEnrolled && enrolledSchool != null && dest == enrolledSchool.gridPosition) return true;
         return false;
     }
 
@@ -888,6 +1002,17 @@ public class Agent : MonoBehaviour
                 }
                 break;
 
+            case AgentState.WalkingToSchool:
+                if (enrolledSchool != null)
+                {
+                    enrolledSchool.StudentArrive(this);
+                    currentState = AgentState.AtSchool;
+                    Debug.Log($"{agentName} arrived at {enrolledSchool.buildingName}.");
+                }
+                else
+                    currentState = AgentState.Idle;
+                break;
+
             case AgentState.WalkingToPark:
                 Building parkBuilding = buildingManager.GetBuildingAt(parkTile);
                 if (parkBuilding != null && parkBuilding.Interact(this))
@@ -958,6 +1083,16 @@ public class Agent : MonoBehaviour
             currentState = AgentState.Idle;
     }
 
+    public void UnenrollSchool()
+    {
+        if (enrolledSchool != null)
+            enrolledSchool.UnenrollStudent(this);
+        enrolledSchool = null;
+        isEnrolled = false;
+        if (currentState == AgentState.WalkingToSchool || currentState == AgentState.AtSchool)
+            currentState = AgentState.Idle;
+    }
+
     public void Feed(float amount)
     {
         hunger = Mathf.Max(hunger - amount, 0f);
@@ -975,16 +1110,28 @@ public class Agent : MonoBehaviour
         Destroy(gameObject);
     }
 
-    public void ChargeRent(int amount)
+    // Returns true if rent was paid, false if the agent was evicted.
+    public bool ChargeRent(int amount)
     {
-        bankBalance -= amount;
-        if (bankBalance < 0)
+        if (bankBalance >= amount)
         {
-            EventLog.LogMoney($"{agentName} can't afford rent! Balance: ${bankBalance}");
-            Debug.Log($"{agentName} can't afford rent! Balance: ${bankBalance}");
-        }
-        else
+            bankBalance -= amount;
             Debug.Log($"{agentName} paid ${amount} rent. Balance: ${bankBalance}");
+            return true;
+        }
+
+        EventLog.LogDanger($"{agentName} can't afford rent and has been evicted!");
+        Debug.Log($"{agentName} evicted — balance ${bankBalance} couldn't cover ${amount} rent.");
+        bankBalance = 0;
+        Evict();
+        return false;
+    }
+
+    public void Evict()
+    {
+        ClearHome();
+        homelessTimer = 0f; // reset so they have full time to find alternative shelter
+        currentState = AgentState.SeekingHomelessShelter;
     }
 
     public void ReceiveWage(int amount)
@@ -1074,5 +1221,9 @@ public enum AgentState
     Patrolling,
     Chasing,
     RespondingToFire,
-    Extinguishing
+    Extinguishing,
+    SeekingSchool,
+    WalkingToSchool,
+    AtSchool,
+    SeekingHomelessShelter
 }

@@ -20,6 +20,8 @@ public class TileAssetGenerator : MonoBehaviour
             ("PoliceStation", new Color(0.15f, 0.0f, 0.95f)),  // bright blue 
             ("FireStation",    new Color(0.95f, 0.0f,  0.5f)),  // bright red-pink
             ("ArrivalPoint",   new Color(0.95f, 0.80f, 0.05f)), // golden amber — bus stop / ferry port
+            ("PreSchool",   new Color(0.20f, 0.40f, 0.90f)), // golden amber — bus stop / ferry port
+            ("School",   new Color(0.15f, 0.20f, 0.40f)), // golden amber — bus stop / ferry port
         };
 
         // Make sure the output folders exist
