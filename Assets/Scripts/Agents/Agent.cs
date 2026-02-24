@@ -46,6 +46,9 @@ public class Agent : MonoBehaviour
     [Header("Finances")]
     public int bankBalance;
 
+    [Header("Health")]
+    public List<ActiveCondition> conditions = new List<ActiveCondition>();
+
     [Header("State")]
     public AgentState currentState = AgentState.Idle;
     public Vector3Int homeTile;
@@ -73,6 +76,13 @@ public class Agent : MonoBehaviour
     [Header("Homeless Behaviour")]
     [Tooltip("Real seconds an agent will wait for housing before leaving town.")]
     public float homelessLeaveTime = 120f;
+
+    // Health / medical internals
+    private Vector3Int medicalTile;
+    private float treatmentTimer;
+    private MedicalBuilding currentMedicalBuilding;
+    private float diseaseCheckTimer;
+    private const float DiseaseCheckInterval = 5f;
 
     // Internal
     private List<Vector3Int> currentPath;
@@ -107,13 +117,20 @@ public class Agent : MonoBehaviour
     private TimeManager timeManager;
 
     // --- Life stage capability helpers ---
-    public bool CanSeekWork()       => lifeStage == LifeStage.Adult;
-    public bool CanShopAlone()      => lifeStage >= LifeStage.Teen;
-    public bool CanCookAlone()      => lifeStage >= LifeStage.YoungChild;
-    public bool CanVisitPark()      => lifeStage >= LifeStage.YoungChild;
-    public bool NeedsParentFeed()   => lifeStage == LifeStage.Baby || lifeStage == LifeStage.Toddler;
-    public bool CanAttendSchool()   => lifeStage >= LifeStage.YoungChild && lifeStage <= LifeStage.Teen;
+    public bool CanSeekWork()        => lifeStage == LifeStage.Adult;
+    public bool CanShopAlone()       => lifeStage >= LifeStage.Teen;
+    public bool CanCookAlone()       => lifeStage >= LifeStage.YoungChild;
+    public bool CanVisitPark()       => lifeStage >= LifeStage.YoungChild;
+    public bool NeedsParentFeed()    => lifeStage == LifeStage.Baby || lifeStage == LifeStage.Toddler;
+    public bool CanAttendSchool()    => lifeStage >= LifeStage.YoungChild && lifeStage <= LifeStage.Teen;
     public bool CanAttendPreschool() => lifeStage == LifeStage.Toddler;
+
+    // --- Health helpers ---
+    public bool IsSick        => conditions.Exists(c => c.symptomatic);
+    public bool NeedsHospital => conditions.Exists(c => c.symptomatic &&
+                                     c.data.severity >= ConditionSeverity.Serious);
+    public bool NeedsDoctor   => conditions.Exists(c => c.symptomatic &&
+                                     c.data.severity == ConditionSeverity.Mild);
 
     // --- Inventory API (used by stores) ---
     public void AddToInventory(ItemType type, int count = 1) => carriedItems.Add(type, count);
@@ -151,9 +168,15 @@ public class Agent : MonoBehaviour
     void Start()
     {
         timeManager = FindFirstObjectByType<TimeManager>();
+        if (timeManager != null)
+            timeManager.OnNewDay += ProgressConditions;
     }
 
-    void OnDestroy() { }
+    void OnDestroy()
+    {
+        if (timeManager != null)
+            timeManager.OnNewDay -= ProgressConditions;
+    }
 
     void Update()
     {
@@ -168,6 +191,14 @@ public class Agent : MonoBehaviour
                 LeaveTown();
                 return;
             }
+        }
+
+        // Periodically spread contagious conditions to nearby agents.
+        diseaseCheckTimer -= Time.deltaTime;
+        if (diseaseCheckTimer <= 0f)
+        {
+            diseaseCheckTimer = DiseaseCheckInterval;
+            CheckDiseaseSpread();
         }
 
         if (isMoving)
@@ -197,6 +228,10 @@ public class Agent : MonoBehaviour
             case AgentState.SeekingSchool:          HandleSeekingSchool();          break;
             case AgentState.AtSchool:               HandleAtSchool();               break;
             case AgentState.SeekingHomelessShelter: HandleSeekingHomelessShelter(); break;
+            case AgentState.SeekingDoctor:          HandleSeekingDoctor();          break;
+            case AgentState.AtDoctor:               HandleAtMedical();              break;
+            case AgentState.SeekingHospital:        HandleSeekingHospital();        break;
+            case AgentState.AtHospital:             HandleAtMedical();              break;
         }
     }
 
@@ -270,6 +305,13 @@ public class Agent : MonoBehaviour
             return;
         }
 
+        // Priority 0: medical emergency — serious/critical illness overrides everything.
+        if (NeedsHospital)
+        {
+            currentState = AgentState.SeekingHospital;
+            return;
+        }
+
         // Priority 1: work — shift takes precedence over everything. Adults only.
         if (CanSeekWork() && hasJob && employer != null && assignedShift != null && timeManager != null)
         {
@@ -325,6 +367,13 @@ public class Agent : MonoBehaviour
                 currentState = AgentState.SeekingFood;
                 return;
             }
+        }
+
+        // Priority 2.5: mild illness — see a doctor when hunger is satisfied.
+        if (NeedsDoctor)
+        {
+            currentState = AgentState.SeekingDoctor;
+            return;
         }
 
         // Priority 3: go home if not already there.
@@ -569,6 +618,11 @@ public class Agent : MonoBehaviour
 
     void HandleCooking()
     {
+        // Small chance of a kitchen injury each second.
+        if (HealthManager.Instance?.minorInjury != null)
+            if (Random.value < HealthManager.Instance.cookingInjuryChancePerSecond * Time.deltaTime)
+                ContractCondition(HealthManager.Instance.minorInjury);
+
         cookingTimer -= Time.deltaTime;
         if (cookingTimer <= 0f)
         {
@@ -632,8 +686,72 @@ public class Agent : MonoBehaviour
         currentState = AgentState.Idle;
     }
 
+    void HandleSeekingDoctor()
+    {
+        Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
+        Vector3Int? pos = buildingManager.FindNearest<DoctorsSurgery>(currentCell, b => b.IsOpen());
+
+        if (pos.HasValue)
+        {
+            var path = pathfinder.FindPath(currentCell, pos.Value);
+            if (path != null)
+            {
+                medicalTile = pos.Value;
+                StartFollowingPath(path);
+                currentState = AgentState.WalkingToDoctor;
+                return;
+            }
+        }
+
+        currentState = AgentState.Idle; // No doctor reachable — try again next think cycle.
+    }
+
+    void HandleSeekingHospital()
+    {
+        Vector3Int currentCell = buildingsTilemap.WorldToCell(transform.position);
+        Vector3Int? pos = buildingManager.FindNearest<Hospital>(currentCell);
+
+        if (pos.HasValue)
+        {
+            var path = pathfinder.FindPath(currentCell, pos.Value);
+            if (path != null)
+            {
+                medicalTile = pos.Value;
+                StartFollowingPath(path);
+                currentState = AgentState.WalkingToHospital;
+                return;
+            }
+        }
+
+        currentState = AgentState.Idle; // No hospital reachable — try again next think cycle.
+    }
+
+    // Shared handler for both AtDoctor and AtHospital.
+    void HandleAtMedical()
+    {
+        treatmentTimer -= Time.deltaTime;
+        if (treatmentTimer <= 0f)
+        {
+            if (currentMedicalBuilding != null)
+            {
+                currentMedicalBuilding.TreatPatient(this);
+                currentMedicalBuilding.DischargePatient(this);
+                currentMedicalBuilding = null;
+            }
+            if (hasHome && StartPathTo(homeTile))
+                currentState = AgentState.WalkingHome;
+            else
+                currentState = AgentState.Idle;
+        }
+    }
+
     void HandleAtPark()
     {
+        // Small chance of a recreational injury at the park.
+        if (HealthManager.Instance?.minorInjury != null)
+            if (Random.value < HealthManager.Instance.parkInjuryChancePerSecond * Time.deltaTime)
+                ContractCondition(HealthManager.Instance.minorInjury);
+
         visitTimer -= Time.deltaTime;
         if (visitTimer <= 0f)
         {
@@ -653,6 +771,11 @@ public class Agent : MonoBehaviour
 
     void HandleWorking()
     {
+        // Small chance of a work-related injury each second.
+        if (HealthManager.Instance?.minorInjury != null)
+            if (Random.value < HealthManager.Instance.workInjuryChancePerSecond * Time.deltaTime)
+                ContractCondition(HealthManager.Instance.minorInjury);
+
         if (timeManager != null && !assignedShift.IsActiveAt(timeManager.CurrentHour))
         {
             employer.WorkerCheckOut(this);
@@ -1002,6 +1125,27 @@ public class Agent : MonoBehaviour
                 }
                 break;
 
+            case AgentState.WalkingToDoctor:
+            case AgentState.WalkingToHospital:
+                MedicalBuilding medBuilding = buildingManager.GetBuildingAt(medicalTile) as MedicalBuilding;
+                if (medBuilding != null && medBuilding.TryAdmit(this))
+                {
+                    // Mark all matching conditions as receiving treatment.
+                    foreach (ActiveCondition ac in conditions)
+                        if (medBuilding.CanTreat(ac.data.severity)) ac.receivingTreatment = true;
+                    treatmentTimer = medBuilding.treatmentDuration;
+                    currentMedicalBuilding = medBuilding;
+                    currentState = currentState == AgentState.WalkingToDoctor
+                        ? AgentState.AtDoctor : AgentState.AtHospital;
+                    Debug.Log($"{agentName} admitted to {medBuilding.buildingName}.");
+                }
+                else
+                {
+                    Debug.Log($"{agentName} couldn't be admitted to medical building — retrying.");
+                    currentState = AgentState.Idle;
+                }
+                break;
+
             case AgentState.WalkingToSchool:
                 if (enrolledSchool != null)
                 {
@@ -1098,6 +1242,97 @@ public class Agent : MonoBehaviour
         hunger = Mathf.Max(hunger - amount, 0f);
     }
 
+    // --- Health API ---
+
+    public void ContractCondition(HealthCondition condition)
+    {
+        if (condition == null) return;
+        if (conditions.Exists(c => c.data == condition)) return; // already infected
+        conditions.Add(new ActiveCondition { data = condition });
+        Debug.Log($"{agentName} contracted {condition.conditionName}.");
+    }
+
+    /// <summary>Removes all active conditions of the given severity (called by medical buildings).</summary>
+    public void TreatConditions(ConditionSeverity severity)
+    {
+        int removed = conditions.RemoveAll(c => c.data.severity == severity);
+        if (removed > 0)
+            Debug.Log($"{agentName}: {removed} condition(s) of severity {severity} treated.");
+    }
+
+    void CheckDiseaseSpread()
+    {
+        if (conditions.Count == 0) return;
+        foreach (Agent other in agentManager.GetAllAgents())
+        {
+            if (other == this) continue;
+            float dist = Vector3.Distance(transform.position, other.transform.position);
+            foreach (ActiveCondition ac in conditions)
+            {
+                if (!ac.symptomatic || !ac.data.isContagious) continue;
+                if (dist > ac.data.spreadRadius) continue;
+                if (Random.value < ac.data.spreadChancePerExposure)
+                    other.ContractCondition(ac.data);
+            }
+        }
+    }
+
+    void ProgressConditions(int day)
+    {
+        for (int i = conditions.Count - 1; i >= 0; i--)
+        {
+            ActiveCondition ac = conditions[i];
+            ac.daysWithCondition++;
+
+            // End incubation once threshold reached.
+            if (!ac.symptomatic && ac.daysWithCondition >= ac.data.incubationDays)
+            {
+                ac.symptomatic = true;
+                EventLog.Log($"{agentName} is showing symptoms of {ac.data.conditionName}.");
+            }
+
+            if (!ac.symptomatic) continue;
+
+            // Natural recovery roll.
+            if (Random.value < ac.data.naturalRecoveryChancePerDay)
+            {
+                conditions.RemoveAt(i);
+                EventLog.Log($"{agentName} recovered naturally from {ac.data.conditionName}.");
+                continue;
+            }
+
+            // Progression if untreated.
+            if (!ac.receivingTreatment && ac.data.progressesIfUntreated
+                && ac.daysWithCondition >= ac.data.daysUntilProgression)
+            {
+                if (ac.data.progressionCondition != null)
+                {
+                    EventLog.LogDanger($"{agentName}'s {ac.data.conditionName} has worsened!");
+                    conditions.RemoveAt(i);
+                    ContractCondition(ac.data.progressionCondition);
+                }
+                else if (ac.data.severity == ConditionSeverity.Critical)
+                {
+                    Die();
+                    return; // agent is gone — stop processing
+                }
+            }
+        }
+    }
+
+    void Die()
+    {
+        string cause = conditions.Count > 0 ? conditions[0].data.conditionName : "unknown causes";
+        EventLog.LogDanger($"{agentName} has died from {cause}.");
+        Debug.Log($"{agentName} died from {cause}.");
+        if (family != null) family.members.Remove(this);
+        if (homeDwelling != null) homeDwelling.DwellingOccupancy.Remove(this);
+        if (hasJob) LoseJob();
+        if (currentMedicalBuilding != null) currentMedicalBuilding.DischargePatient(this);
+        agentManager.RemoveAgent(this);
+        Destroy(gameObject);
+    }
+
     void LeaveTown()
     {
         EventLog.Log($"{agentName} gave up waiting for housing and left town.");
@@ -1106,6 +1341,8 @@ public class Agent : MonoBehaviour
             family.members.Remove(this);
         if (homeDwelling != null)
             homeDwelling.DwellingOccupancy.Remove(this);
+        if (currentMedicalBuilding != null)
+            currentMedicalBuilding.DischargePatient(this);
         agentManager.RemoveAgent(this);
         Destroy(gameObject);
     }
@@ -1225,5 +1462,11 @@ public enum AgentState
     SeekingSchool,
     WalkingToSchool,
     AtSchool,
-    SeekingHomelessShelter
+    SeekingHomelessShelter,
+    SeekingDoctor,
+    WalkingToDoctor,
+    AtDoctor,
+    SeekingHospital,
+    WalkingToHospital,
+    AtHospital
 }
