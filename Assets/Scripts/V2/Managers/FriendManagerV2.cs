@@ -8,7 +8,6 @@ public class FriendEdge
     public int OpinionAtoB;
     public int OpinionBtoA;
     public bool IsAlive;
-
 }
 
 public class FriendManagerV2 : MonoBehaviour
@@ -63,11 +62,35 @@ public class FriendManagerV2 : MonoBehaviour
         return friends;
     }
 
-    private int GetFriendCount(string agentId)
+    public int GetFriendCount(string agentId)
     {
         int count = 0;
         if (byAgentA.TryGetValue(agentId, out var listA)) count += listA.Count;
         if (byAgentB.TryGetValue(agentId, out var listB)) count += listB.Count;
         return count;
+    }
+
+    public bool AreFriends(string agentA, string agentB)
+    {
+        var friends = GetFriends(agentA);
+
+        foreach (var edge in friends)
+        {
+            if (edge.AgentIdA == agentB || edge.AgentIdB == agentB)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public void TryForFriendship(string agentA, string agentB, float chance)
+    {
+        if (AreFriends(agentA, agentB)) return;
+
+        if (Random.value > chance) return;
+
+        AddEdge(agentA, agentB, 0, 0);
     }
 }
