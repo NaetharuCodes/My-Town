@@ -1,9 +1,9 @@
 
 public interface IAgentModule
 {
-    void Initialize(Agent agent);
+    void Initialize(AgentV2 agent);
 
-    void Tick(Agent agent);
+    void Tick(AgentV2 agent);
 
-    void Cleanup(Agent agent);
+    void Cleanup(AgentV2 agent);
 }

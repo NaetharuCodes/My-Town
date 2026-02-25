@@ -1,8 +1,8 @@
 using System;
-using System.Collection.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
-public class Agent : MonoBehaviour
+public class AgentV2 : MonoBehaviour
 {
     public string Id { get; private set; }
     public string Name;
