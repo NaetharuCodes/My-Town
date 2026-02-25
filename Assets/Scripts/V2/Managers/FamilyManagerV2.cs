@@ -7,8 +7,6 @@ public class FamilyEdge
     public string AgentIdA;
     public string AgentIdB;
     public string Type;
-    public int OppinionAtoB;
-    public int OppinionBtoA;
     public bool IsAlive;
 }
 
@@ -25,15 +23,13 @@ public class FamilyManagerV2 : MonoBehaviour
         instance = this;
     }
 
-    public void AddEdge(string agentA, string agentB, string type, int oppinionAtoB = 50, int oppinionBtoA = 50)
+    public void AddEdge(string agentA, string agentB, string type)
     {
         var edge = new FamilyEdge
         {
             AgentIdA = agentA,
             AgentIdB = agentB,
             Type = type,
-            OppinionAtoB = oppinionAtoB,
-            OppinionBtoA = oppinionBtoA,
             IsAlive = true
         };
 
@@ -47,7 +43,6 @@ public class FamilyManagerV2 : MonoBehaviour
         byAgentB[agentB].Add(edge);
     }
 
-    // Who are my children?
     public List<FamilyEdge> GetChildren(string agentId)
     {
         return byAgentA.GetValueOrDefault(agentId, new())
