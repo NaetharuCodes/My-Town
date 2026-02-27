@@ -112,6 +112,39 @@ public class CommercialBuilding : Building
             shift.CheckOut(agent);
     }
 
+    // ── V2 AgentV2 overloads ───────────────────────────────────────────────────
+
+    public Shift TryHire(AgentV2 agent)
+    {
+        foreach (var shift in shifts)
+            if (shift.TryAssign(agent))
+                return shift;
+        return null;
+    }
+
+    public Shift GetShiftFor(AgentV2 agent)
+    {
+        foreach (var shift in shifts)
+            if (shift.IsAssigned(agent))
+                return shift;
+        return null;
+    }
+
+    public void WorkerCheckIn(AgentV2 agent)
+    {
+        foreach (var shift in shifts)
+            if (shift.IsAssigned(agent))
+                shift.CheckIn(agent);
+    }
+
+    public void WorkerCheckOut(AgentV2 agent)
+    {
+        foreach (var shift in shifts)
+            shift.CheckOut(agent);
+    }
+
+    public virtual bool Interact(AgentV2 agent) => false;
+
     // --- Payroll ---
 
     void OnNewDay(int day)
@@ -141,6 +174,19 @@ public class CommercialBuilding : Building
             {
                 EventLog.LogMoney($"{buildingName} can't afford to pay {worker.agentName}!");
                 Debug.Log($"{buildingName} can't afford to pay {worker.agentName}!");
+            }
+        }
+
+        foreach (var worker in shift.AssignedWorkersV2)
+        {
+            if (treasury >= shift.wage)
+            {
+                treasury -= shift.wage;
+                worker.ModifyStat("bank_balance", shift.wage);
+            }
+            else
+            {
+                Debug.Log($"{buildingName} can't afford to pay {worker.Name}!");
             }
         }
     }

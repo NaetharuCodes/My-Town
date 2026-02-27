@@ -70,4 +70,26 @@ public class Supermarket : CommercialBuilding
             EventLog.LogWarning($"No police in town — {criminal.agentName} gets away!");
             Debug.Log($"No police station in town — {criminal.agentName} gets away!");
     }
+
+    public override bool Interact(AgentV2 agent)
+    {
+        if (!IsOpen())
+        {
+            Debug.Log($"{agent.Name} tried to shop but {buildingName} is closed.");
+            return false;
+        }
+
+        if (agent.GetStat("bank_balance") < groceryPackCost)
+        {
+            Debug.Log($"{agent.Name} can't afford groceries.");
+            return false;
+        }
+
+        agent.ModifyStat("bank_balance", -groceryPackCost);
+        agent.GetModule<HomeModule>()?.AddCarriedGroceries(groceriesPerPack);
+        treasury += groceryPackCost;
+        Debug.Log($"{agent.Name} bought {groceriesPerPack} groceries.");
+        return true;
+        // TODO: thief trait logic not yet implemented for V2 agents.
+    }
 }

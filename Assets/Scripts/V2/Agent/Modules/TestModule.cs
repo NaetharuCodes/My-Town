@@ -4,7 +4,7 @@ public class TestModule : IAgentModule
 {
     public void Initialize(AgentV2 agent)
     {
-        agent.setStat("test_value", 0f);
+        agent.SetStat("test_value", 0f);
         Debug.Log($"{agent.Name}: TestModule initialized");
     }
 
@@ -15,10 +15,12 @@ public class TestModule : IAgentModule
         if (agent.GetStat("test_value") > 5f)
         {
             Debug.Log($"{agent.Name}: 5 seconds have passed!");
-            agent.setStat("test_value", 0f);
+            agent.SetStat("test_value", 0f);
             agent.RaiseEvent("test_tick");
         }
     }
+
+    public void SlowTick(AgentV2 agent) { }
 
     public void Cleanup(AgentV2 agent)
     {

@@ -4,7 +4,7 @@ using UnityEngine;
 // Abstract base for School and Preschool buildings.
 // Municipal buildings run by the county — teachers are hired on shifts and paid from
 // a daily county budget rather than from student fees. Students always attend for free.
-// Subclasses (School, Preschool) are empty — the life stage check lives in Agent.
+// Subclasses (School, Preschool) are empty — the life stage check lives in Agent/SchoolModule.
 public abstract class SchoolBuilding : CommercialBuilding
 {
     [Header("School Configuration")]
@@ -18,14 +18,15 @@ public abstract class SchoolBuilding : CommercialBuilding
     public int dailyMunicipalBudget = 200;
     public int startingTreasury = 2000;
 
-    private readonly List<Agent> enrolledStudents = new List<Agent>();
-    private readonly HashSet<Agent> presentStudents = new HashSet<Agent>();
+    private readonly List<Agent>    enrolledStudents   = new List<Agent>();
+    private readonly HashSet<Agent>  presentStudents   = new HashSet<Agent>();
+    private readonly List<AgentV2>   enrolledStudentsV2 = new List<AgentV2>();
+    private readonly HashSet<AgentV2> presentStudentsV2 = new HashSet<AgentV2>();
 
-    public int EnrolledCount => enrolledStudents.Count;
-    public int PresentCount  => presentStudents.Count;
+    public int EnrolledCount => enrolledStudents.Count + enrolledStudentsV2.Count;
+    public int PresentCount  => presentStudents.Count  + presentStudentsV2.Count;
 
-    public bool IsEnrollmentOpen() => enrolledStudents.Count < maxStudents;
-
+    public bool IsEnrollmentOpen() => EnrolledCount < maxStudents;
     public bool IsInSession(int hour) => hour >= openHour && hour < closeHour;
 
     protected override void Awake()
@@ -48,10 +49,13 @@ public abstract class SchoolBuilding : CommercialBuilding
 
         base.OnDestroy();
 
-        // Unenroll all students so they seek a new school or revert to staying home.
-        // Iterate over a copy because UnenrollSchool() may modify the list indirectly.
+        // Unenroll all V1 students so they seek a new school or revert to staying home.
         foreach (Agent student in new List<Agent>(enrolledStudents))
             student.UnenrollSchool();
+
+        // Unenroll all V2 students via their SchoolModule.
+        foreach (AgentV2 student in new List<AgentV2>(enrolledStudentsV2))
+            student.GetModule<SchoolModule>()?.Unenroll(student);
     }
 
     void ReceiveMunicipalBudget(int day)
@@ -75,7 +79,7 @@ public abstract class SchoolBuilding : CommercialBuilding
         });
     }
 
-    // Returns true if the agent was successfully enrolled.
+    // ── V1 Agent overloads ─────────────────────────────────────────────────────
     public bool TryEnroll(Agent agent)
     {
         if (!IsEnrollmentOpen() || enrolledStudents.Contains(agent)) return false;
@@ -92,8 +96,30 @@ public abstract class SchoolBuilding : CommercialBuilding
     public void StudentArrive(Agent agent) => presentStudents.Add(agent);
     public void StudentLeave(Agent agent)  => presentStudents.Remove(agent);
 
-    // Arriving at a school is always a success — the agent transitions to AtSchool.
     public override bool Interact(Agent agent)
+    {
+        StudentArrive(agent);
+        return true;
+    }
+
+    // ── V2 AgentV2 overloads ───────────────────────────────────────────────────
+    public bool TryEnroll(AgentV2 agent)
+    {
+        if (!IsEnrollmentOpen() || enrolledStudentsV2.Contains(agent)) return false;
+        enrolledStudentsV2.Add(agent);
+        return true;
+    }
+
+    public void UnenrollStudent(AgentV2 agent)
+    {
+        enrolledStudentsV2.Remove(agent);
+        presentStudentsV2.Remove(agent);
+    }
+
+    public void StudentArrive(AgentV2 agent) => presentStudentsV2.Add(agent);
+    public void StudentLeave(AgentV2 agent)  => presentStudentsV2.Remove(agent);
+
+    public override bool Interact(AgentV2 agent)
     {
         StudentArrive(agent);
         return true;

@@ -38,4 +38,24 @@ public class BurgerStore : CommercialBuilding
         treasury += mealPrice;
         return true;
     }
+
+    public override bool Interact(AgentV2 agent)
+    {
+        if (!IsOpen())
+        {
+            Debug.Log($"{agent.Name} tried to buy food but {buildingName} is closed.");
+            return false;
+        }
+
+        if (agent.GetStat("bank_balance") < mealPrice)
+        {
+            Debug.Log($"{agent.Name} can't afford food!");
+            return false;
+        }
+
+        agent.ModifyStat("bank_balance", -mealPrice);
+        agent.GetModule<FoodModule>()?.RestoreHunger(agent, hungerRestored);
+        treasury += mealPrice;
+        return true;
+    }
 }

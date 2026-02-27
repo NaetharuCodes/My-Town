@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Tilemaps;
 
 public class AgentV2 : MonoBehaviour
 {
@@ -8,14 +9,32 @@ public class AgentV2 : MonoBehaviour
     public string Name;
 
     public Dictionary<string, float> Stats { get; private set; }
-
     public HashSet<string> Tags { get; private set; }
+
+    // Tracks what the agent is currently doing — used by modules to coordinate travel/arrival.
+    // Set by the module that takes ownership of movement; cleared on task completion.
+    public string CurrentTask { get; set; } = "";
+
+    // Scene-level dependencies — set via Initialise() before adding modules.
+    public BuildingManager BuildingManager { get; private set; }
+    public TimeManager     TimeManager     { get; private set; }
+    public Pathfinder      Pathfinder      { get; private set; }
+    public Tilemap         BuildingsTilemap { get; private set; }
 
     public event Action<string, object> OnEvent;
 
     public void RaiseEvent(string eventType, object data = null)
     {
         OnEvent?.Invoke(eventType, data);
+    }
+
+    // Call this before adding any modules so they can access scene references.
+    public void Initialise(BuildingManager bm, Pathfinder pf, Tilemap tilemap, TimeManager tm)
+    {
+        BuildingManager  = bm;
+        Pathfinder       = pf;
+        BuildingsTilemap = tilemap;
+        TimeManager      = tm;
     }
 
     private List<IAgentModule> modules;
@@ -59,6 +78,16 @@ public class AgentV2 : MonoBehaviour
         return null;
     }
 
+    private void Start()
+    {
+        AgentScheduler.Instance.Register(this);
+    }
+
+    private void OnDestroy()
+    {
+        AgentScheduler.Instance?.Unregister(this);
+    }
+
     private void Update()
     {
         for (int i = 0; i < modules.Count; i++)
@@ -67,12 +96,21 @@ public class AgentV2 : MonoBehaviour
         }
     }
 
+    // Called by AgentScheduler, staggered across frames.
+    public void SlowTick()
+    {
+        for (int i = 0; i < modules.Count; i++)
+        {
+            modules[i].SlowTick(this);
+        }
+    }
+
     public float GetStat(string key, float defaultValue = 0f)
     {
         return Stats.TryGetValue(key, out float value) ? value : defaultValue;
     }
 
-    public void setStat(string key, float value)
+    public void SetStat(string key, float value)
     {
         Stats[key] = value;
     }
