@@ -15,9 +15,10 @@ public class DoctorsSurgery : MedicalBuilding
     public override bool CanTreat(ConditionSeverity severity)
         => severity == ConditionSeverity.Mild;
 
+    // ── V1 Agent overloads ─────────────────────────────────────────────────────
     public override bool TryAdmit(Agent agent)
     {
-        if (!IsOpen() || currentPatients.Count >= maxPatients) return false;
+        if (!IsOpen() || TotalPatients >= maxPatients) return false;
         currentPatients.Add(agent);
         return true;
     }
@@ -36,6 +37,32 @@ public class DoctorsSurgery : MedicalBuilding
         Debug.Log($"{agent.agentName} treated at {buildingName}. Fee: ${consultationFee}");
     }
 
+    // ── V2 AgentV2 overloads ───────────────────────────────────────────────────
+    public override bool TryAdmit(AgentV2 agent)
+    {
+        if (!IsOpen() || TotalPatients >= maxPatients) return false;
+        currentPatientsV2.Add(agent);
+        return true;
+    }
+
+    public override void DischargePatient(AgentV2 agent)
+    {
+        currentPatientsV2.Remove(agent);
+    }
+
+    public override void TreatPatient(AgentV2 agent)
+    {
+        agent.GetModule<MedicalModule>()?.TreatConditions(ConditionSeverity.Mild);
+        if (agent.GetStat("bank_balance") >= consultationFee)
+        {
+            agent.ModifyStat("bank_balance", -consultationFee);
+            treasury += consultationFee;
+        }
+        Debug.Log($"{agent.Name} treated at {buildingName}. Fee: ${consultationFee}");
+    }
+
+    public override bool Interact(AgentV2 agent) => false; // patients admitted via TryAdmit
+
     protected override void SetupDefaultShifts()
     {
         int start = Random.Range(7, 10);
@@ -49,5 +76,7 @@ public class DoctorsSurgery : MedicalBuilding
         });
     }
 
-    public override bool Interact(Agent agent) => false; // patients are admitted via TryAdmit
+    public override bool Interact(Agent agent) => false; // patients admitted via TryAdmit
+
+    private int TotalPatients => currentPatients.Count + currentPatientsV2.Count;
 }

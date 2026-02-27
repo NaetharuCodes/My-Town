@@ -12,13 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2673ff9db96db444cb271a29cf8b502d, type: 3}
   m_Name: CommonCold
   m_EditorClassIdentifier: Assembly-CSharp::HealthCondition
-  conditionName: 
+  conditionName: Common Cold
   severity: 0
-  isContagious: 0
+  isContagious: 1
   spreadRadius: 2
   spreadChancePerExposure: 0.05
   incubationDays: 1
-  naturalRecoveryChancePerDay: 0.1
+  naturalRecoveryChancePerDay: 0.4
   progressesIfUntreated: 0
   daysUntilProgression: 5
   progressionCondition: {fileID: 0}

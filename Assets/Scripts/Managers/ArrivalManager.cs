@@ -13,6 +13,10 @@ public class ArrivalManager : MonoBehaviour
     public AgentManager agentManager;
     public BuildingManager buildingManager;
 
+    [Header("Agent Version")]
+    [Tooltip("When true, spawns V2 module-based agents instead of the legacy V1 agents.")]
+    public bool useV2Agents = false;
+
     [Header("Arrival Settings")]
     [Tooltip("Chance (0–1) that any families arrive at each transport departure (every 4 game-hours).")]
     public float arrivalChance = 0.65f;
@@ -62,7 +66,8 @@ public class ArrivalManager : MonoBehaviour
         {
             if (hour != dep) continue;
 
-            if (agentManager.GetAllAgents().Count >= maxPopulation) return;
+            int pop = useV2Agents ? agentManager.GetAllAgentsV2().Count : agentManager.GetAllAgents().Count;
+            if (pop >= maxPopulation) return;
             if (Random.value < arrivalChance)
                 SpawnTransport();
 
@@ -77,7 +82,8 @@ public class ArrivalManager : MonoBehaviour
 
         for (int i = 0; i < familyCount; i++)
         {
-            if (agentManager.GetAllAgents().Count + totalPeople >= maxPopulation) break;
+            int pop = useV2Agents ? agentManager.GetAllAgentsV2().Count : agentManager.GetAllAgents().Count;
+            if (pop + totalPeople >= maxPopulation) break;
             totalPeople += SpawnFamily();
         }
 
@@ -114,7 +120,12 @@ public class ArrivalManager : MonoBehaviour
 
         // Spawn all members at the arrival tile.
         foreach (var (stage, role) in members)
-            agentManager.SpawnFamilyMember(spawnTile, family, stage, role, lastName);
+        {
+            if (useV2Agents)
+                agentManager.SpawnFamilyMemberV2(spawnTile, family, stage, role, lastName);
+            else
+                agentManager.SpawnFamilyMember(spawnTile, family, stage, role, lastName);
+        }
 
         agentManager.RegisterFamily(family);
 
@@ -142,8 +153,16 @@ public class ArrivalManager : MonoBehaviour
     int CountHomeless()
     {
         int count = 0;
-        foreach (Agent a in agentManager.GetAllAgents())
-            if (!a.hasHome) count++;
+        if (useV2Agents)
+        {
+            foreach (AgentV2 a in agentManager.GetAllAgentsV2())
+                if (a.GetModule<HomeModule>()?.HasHome != true) count++;
+        }
+        else
+        {
+            foreach (Agent a in agentManager.GetAllAgents())
+                if (!a.hasHome) count++;
+        }
         return count;
     }
 

@@ -2,13 +2,14 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// A single hospital bed. Tracks which agent is occupying it.
+/// A single hospital bed. Tracks which agent (V1 or V2) is occupying it.
 /// </summary>
 [System.Serializable]
 public class HospitalBed
 {
-    public Agent occupant;
-    public bool IsOccupied => occupant != null;
+    public Agent   occupant   = null;
+    public AgentV2 occupantV2 = null;
+    public bool IsOccupied => occupant != null || occupantV2 != null;
 }
 
 /// <summary>
@@ -28,6 +29,7 @@ public class Hospital : MedicalBuilding
     public override bool CanTreat(ConditionSeverity severity)
         => severity == ConditionSeverity.Serious || severity == ConditionSeverity.Critical;
 
+    // ── V1 Agent overloads ─────────────────────────────────────────────────────
     public override bool TryAdmit(Agent agent)
     {
         HospitalBed free = beds.Find(b => !b.IsOccupied);
@@ -54,6 +56,39 @@ public class Hospital : MedicalBuilding
         Debug.Log($"{agent.agentName} discharged from {buildingName}. Cost: ${treatmentCost}");
     }
 
+    // ── V2 AgentV2 overloads ───────────────────────────────────────────────────
+    public override bool TryAdmit(AgentV2 agent)
+    {
+        HospitalBed free = beds.Find(b => !b.IsOccupied);
+        if (free == null) return false;
+        free.occupantV2 = agent;
+        currentPatientsV2.Add(agent);
+        return true;
+    }
+
+    public override void DischargePatient(AgentV2 agent)
+    {
+        HospitalBed bed = beds.Find(b => b.occupantV2 == agent);
+        if (bed != null) bed.occupantV2 = null;
+        currentPatientsV2.Remove(agent);
+    }
+
+    public override void TreatPatient(AgentV2 agent)
+    {
+        var medical = agent.GetModule<MedicalModule>();
+        medical?.TreatConditions(ConditionSeverity.Serious);
+        medical?.TreatConditions(ConditionSeverity.Critical);
+        if (agent.GetStat("bank_balance") >= treatmentCost)
+        {
+            agent.ModifyStat("bank_balance", -treatmentCost);
+            treasury += treatmentCost;
+        }
+        Debug.Log($"{agent.Name} discharged from {buildingName}. Cost: ${treatmentCost}");
+    }
+
+    public override bool Interact(Agent agent)   => false; // patients admitted via TryAdmit
+    public override bool Interact(AgentV2 agent) => false;
+
     protected override void SetupDefaultShifts()
     {
         // Day shift: 7am–19pm
@@ -75,6 +110,4 @@ public class Hospital : MedicalBuilding
             payFrequency    = PayFrequency.Weekly
         });
     }
-
-    public override bool Interact(Agent agent) => false; // patients are admitted via TryAdmit
 }
