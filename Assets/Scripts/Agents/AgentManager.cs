@@ -75,6 +75,7 @@ public class AgentManager : MonoBehaviour
         agent.AddModule(new FoodModule());
         agent.AddModule(new MedicalModule());
         agent.AddModule(new SocialModule());
+        agent.AddModule(new SleepModule());
         agent.AddModule(new LocomotionModule());
         agent.AddModule(new DecisionModule());  // last — starts making decisions immediately
 

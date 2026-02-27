@@ -5,19 +5,21 @@ using UnityEngine;
 // the best action changes.  All logic mirrors V1 Agent.HandleIdle() exactly.
 //
 // Priority order (highest → lowest):
-//   0.  Baby / needs-parent-feed — stay home, no independent actions
-//   1.  School (children: enrolled + in session)     ← mirrors work priority for adults
-//   2.  Hospital (serious/critical illness)
-//   3.  Work (adults: employed + shift active)
-//   4.  Hungry — cook at home if possible, else eat out
-//   5.  Doctor (mild illness — only after hunger satisfied)
-//   6.  Go home (has home, not there yet)
-//   7.  Seek home (homeless — find a dwelling or park)
-//   8.  Seek groceries (pantry low, Teen+ can shop)
-//   9.  Socialise (lonely, YoungChild+ can visit park)
-//  10.  Seek job (unemployed adult)
-//  11.  Seek school enrollment (eligible, not yet enrolled)
-//  12.  Idle
+//   0.  Currently sleeping — don't interrupt
+//   1.  Baby / needs-parent-feed — stay home, no independent actions
+//   2.  School (children: enrolled + in session)     ← mirrors work priority for adults
+//   3.  Hospital (serious/critical illness)
+//   4.  Work (adults: employed + shift active)
+//   5.  Hungry — cook at home if possible, else eat out
+//   6.  Sleep (in sleep window or exhausted)
+//   7.  Doctor (mild illness)
+//   8.  Go home (has home, not there yet)
+//   9.  Seek home (homeless — find a dwelling or park)
+//  10.  Seek groceries (pantry low, Teen+ can shop)
+//  11.  Socialise (lonely, YoungChild+ can visit park)
+//  12.  Seek job (unemployed adult)
+//  13.  Seek school enrollment (eligible, not yet enrolled)
+//  14.  Idle
 public class DecisionModule : IAgentModule
 {
     private string currentAction = "idle";
@@ -41,7 +43,11 @@ public class DecisionModule : IAgentModule
     // ── Priority cascade ───────────────────────────────────────────────────────
     private static string Decide(AgentV2 agent)
     {
-        // ── P0: Baby — no independent actions ─────────────────────────────────
+        // ── P0: Currently sleeping — hold position until SleepModule wakes us ───
+        if (agent.Tags.Contains("is_sleeping"))
+            return "sleep";
+
+        // ── P1: Baby — no independent actions ─────────────────────────────────
         if (agent.Tags.Contains("life_baby"))
             return "idle";
 
@@ -74,7 +80,11 @@ public class DecisionModule : IAgentModule
             return "eat";
         }
 
-        // ── P5: Mild illness (checked after hunger — matches V1 ordering) ──────
+        // ── P6: Sleep (window active or exhausted — after eating, before errands) ─
+        if (agent.Tags.Contains("needs_sleep"))
+            return "sleep";
+
+        // ── P7: Mild illness ──────────────────────────────────────────────────
         if (agent.Tags.Contains("needs_doctor"))
             return "seek_doctor";
 
