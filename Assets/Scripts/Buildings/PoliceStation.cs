@@ -62,23 +62,9 @@ public class PoliceStation : CommercialBuilding
         Debug.Log($"{buildingName} received ${dailyMunicipalBudget} municipal budget. Treasury: ${treasury}");
     }
 
-    // Find any on-duty officer who isn't already chasing someone and set them on the criminal.
-    public void DispatchOfficer(Agent criminal)
+    // TODO: V2 police dispatch — send an on-duty V2 officer to chase the criminal.
+    public void DispatchOfficer(AgentV2 criminal)
     {
-        foreach (var shift in shifts)
-        {
-            foreach (var officer in shift.PresentWorkers)
-            {
-                if (officer.currentState != AgentState.Chasing)
-                {
-                    officer.AssignChase(criminal, arrestFine);
-                    return;
-                }
-            }
-        }
-        Debug.Log($"No available officers at {buildingName} to respond!");
+        Debug.Log($"Police dispatch for {criminal.Name} — V2 officer dispatch not yet implemented.");
     }
-
-    // Police station is not interactive by regular agents.
-    public override bool Interact(Agent agent) => false;
 }

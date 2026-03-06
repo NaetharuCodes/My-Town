@@ -34,15 +34,28 @@ public class LocomotionModule : IAgentModule
         pathIndex   = 0;
         isMoving    = true;
 
-        // TODO: call the existing A* pathfinder here and populate `path`.
-        // e.g.  path = Pathfinder.FindPath(agent.transform.position, target);
-        // For now we move directly toward the destination.
-        path = new List<Vector3> { target };
-
-        if (path == null || path.Count == 0)
+        if (agent.Pathfinder != null && agent.BuildingsTilemap != null)
         {
-            isMoving = false;
-            agent.RaiseEvent("path_failed", target);
+            Vector3Int startCell = agent.BuildingsTilemap.WorldToCell(agent.transform.position);
+            Vector3Int endCell   = agent.BuildingsTilemap.WorldToCell(target);
+
+            var tilePath = agent.Pathfinder.FindPath(startCell, endCell);
+
+            if (tilePath == null || tilePath.Count == 0)
+            {
+                isMoving = false;
+                agent.RaiseEvent("path_failed", target);
+                return;
+            }
+
+            path = new List<Vector3>(tilePath.Count);
+            foreach (Vector3Int tile in tilePath)
+                path.Add(agent.BuildingsTilemap.GetCellCenterWorld(tile));
+        }
+        else
+        {
+            // Fallback: move directly (no pathfinder available).
+            path = new List<Vector3> { target };
         }
     }
 

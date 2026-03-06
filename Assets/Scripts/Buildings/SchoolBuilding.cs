@@ -18,13 +18,11 @@ public abstract class SchoolBuilding : CommercialBuilding
     public int dailyMunicipalBudget = 200;
     public int startingTreasury = 2000;
 
-    private readonly List<Agent>    enrolledStudents   = new List<Agent>();
-    private readonly HashSet<Agent>  presentStudents   = new HashSet<Agent>();
     private readonly List<AgentV2>   enrolledStudentsV2 = new List<AgentV2>();
     private readonly HashSet<AgentV2> presentStudentsV2 = new HashSet<AgentV2>();
 
-    public int EnrolledCount => enrolledStudents.Count + enrolledStudentsV2.Count;
-    public int PresentCount  => presentStudents.Count  + presentStudentsV2.Count;
+    public int EnrolledCount => enrolledStudentsV2.Count;
+    public int PresentCount  => presentStudentsV2.Count;
 
     public bool IsEnrollmentOpen() => EnrolledCount < maxStudents;
     public bool IsInSession(int hour) => hour >= openHour && hour < closeHour;
@@ -49,11 +47,6 @@ public abstract class SchoolBuilding : CommercialBuilding
 
         base.OnDestroy();
 
-        // Unenroll all V1 students so they seek a new school or revert to staying home.
-        foreach (Agent student in new List<Agent>(enrolledStudents))
-            student.UnenrollSchool();
-
-        // Unenroll all V2 students via their SchoolModule.
         foreach (AgentV2 student in new List<AgentV2>(enrolledStudentsV2))
             student.GetModule<SchoolModule>()?.Unenroll(student);
     }
@@ -79,30 +72,6 @@ public abstract class SchoolBuilding : CommercialBuilding
         });
     }
 
-    // ── V1 Agent overloads ─────────────────────────────────────────────────────
-    public bool TryEnroll(Agent agent)
-    {
-        if (!IsEnrollmentOpen() || enrolledStudents.Contains(agent)) return false;
-        enrolledStudents.Add(agent);
-        return true;
-    }
-
-    public void UnenrollStudent(Agent agent)
-    {
-        enrolledStudents.Remove(agent);
-        presentStudents.Remove(agent);
-    }
-
-    public void StudentArrive(Agent agent) => presentStudents.Add(agent);
-    public void StudentLeave(Agent agent)  => presentStudents.Remove(agent);
-
-    public override bool Interact(Agent agent)
-    {
-        StudentArrive(agent);
-        return true;
-    }
-
-    // ── V2 AgentV2 overloads ───────────────────────────────────────────────────
     public bool TryEnroll(AgentV2 agent)
     {
         if (!IsEnrollmentOpen() || enrolledStudentsV2.Contains(agent)) return false;

@@ -73,52 +73,26 @@ public class SaveManager : MonoBehaviour
         // Buildings tilemap tiles + building objects
         foreach (var kvp in buildingManager.GetAllBuildings())
         {
-            Vector3Int pos     = kvp.Key;
+            Vector3Int pos      = kvp.Key;
             Building   building = kvp.Value;
 
             BuildingSaveData bd = new BuildingSaveData
             {
                 x        = pos.x,
                 y        = pos.y,
-                treasury = building.treasury
+                treasury = building.treasury,
+                type     = building switch
+                {
+                    ResidentialBuilding => "House",
+                    BurgerStore         => "BurgerStore",
+                    Supermarket         => "Supermarket",
+                    Office              => "Office",
+                    Park                => "Park",
+                    PoliceStation       => "PoliceStation",
+                    FireStation         => "FireStation",
+                    _                   => "Unknown"
+                }
             };
-
-            if (building is ResidentialBuilding res)
-            {
-                bd.type = "House";
-                var (names, groceries) = res.GetSaveData();
-                bd.occupantNames   = names;
-                bd.pantryGroceries = groceries;
-            }
-            else if (building is BurgerStore)
-            {
-                bd.type = "BurgerStore";
-                bd.shiftWorkerNames = ((CommercialBuilding)building).GetAssignedWorkerNames();
-            }
-            else if (building is Supermarket)
-            {
-                bd.type = "Supermarket";
-                bd.shiftWorkerNames = ((CommercialBuilding)building).GetAssignedWorkerNames();
-            }
-            else if (building is Office)
-            {
-                bd.type = "Office";
-                bd.shiftWorkerNames = ((CommercialBuilding)building).GetAssignedWorkerNames();
-            }
-            else if (building is Park)
-            {
-                bd.type = "Park";
-            }
-            else if (building is PoliceStation ps)
-            {
-                bd.type = "PoliceStation";
-                bd.shiftWorkerNames = ps.GetAssignedWorkerNames();
-            }
-            else if (building is FireStation fs)
-            {
-                bd.type = "FireStation";
-                bd.shiftWorkerNames = fs.GetAssignedWorkerNames();
-            }
 
             data.buildings.Add(bd);
         }
@@ -140,33 +114,10 @@ public class SaveManager : MonoBehaviour
             }
         }
 
-        // Agents
-        foreach (Agent agent in agentManager.GetAllAgents())
-        {
-            agent.personality.GetSaveData(out List<string> traitKeys, out List<int> traitValues);
-            AgentSaveData ad = new AgentSaveData
-            {
-                agentName        = agent.agentName,
-                worldX           = agent.transform.position.x,
-                worldY           = agent.transform.position.y,
-                hunger           = agent.hunger,
-                loneliness       = agent.loneliness,
-                bankBalance      = agent.bankBalance,
-                hasHome          = agent.hasHome,
-                homeTileX        = agent.homeTile.x,
-                homeTileY        = agent.homeTile.y,
-                hasJob           = agent.hasJob,
-                employerX        = agent.hasJob && agent.employer != null ? agent.employer.gridPosition.x : 0,
-                employerY        = agent.hasJob && agent.employer != null ? agent.employer.gridPosition.y : 0,
-                carriedGroceries = agent.CarriedCount(ItemType.Groceries),
-                traitKeys        = traitKeys,
-                traitValues      = traitValues
-            };
-            data.agents.Add(ad);
-        }
+        // TODO: V2 agent save — save V2 agent state (home, job, stats) for each AgentV2.
 
         File.WriteAllText(SavePath, JsonUtility.ToJson(data, prettyPrint: true));
-        Debug.Log($"Game saved. Day {data.time.currentDay}, {data.agents.Count} agents, {data.buildings.Count} buildings.");
+        Debug.Log($"Game saved. Day {data.time.currentDay}, {data.buildings.Count} buildings.");
     }
 
     // -----------------------------------------------------------------------
@@ -190,11 +141,9 @@ public class SaveManager : MonoBehaviour
         // --- Clear current state ---
         buildingsTilemap.ClearAllTiles();
         buildingManager.ClearAll();
-        agentManager.DespawnAll();
+        // TODO: despawn V2 agents when V2 save/load is implemented.
 
         // --- Pass 1: rebuild tilemap + building objects ---
-        Dictionary<Vector3Int, BuildingSaveData> buildingDataByPos = new();
-
         foreach (BuildingSaveData bd in data.buildings)
         {
             Vector3Int pos = new Vector3Int(bd.x, bd.y, 0);
@@ -203,71 +152,19 @@ public class SaveManager : MonoBehaviour
             if (tile != null)
                 buildingsTilemap.SetTile(pos, tile);
 
-            if (bd.type == "Road") continue; // roads need no building object
+            if (bd.type == "Road") continue;
 
             Building b = CreateBuilding(bd.type, pos);
             if (b != null)
             {
                 b.treasury = bd.treasury;
                 buildingManager.RegisterBuilding(b);
-                buildingDataByPos[pos] = bd;
             }
         }
 
-        // --- Pass 2: recreate agents ---
-        Dictionary<string, Agent> agentsByName = new();
-        foreach (AgentSaveData ad in data.agents)
-        {
-            Agent agent = agentManager.SpawnAgentFromSave(ad);
-            agent.hunger      = ad.hunger;
-            agent.loneliness  = ad.loneliness;
-            agent.bankBalance = ad.bankBalance;
-            agent.personality.LoadFromSave(ad.traitKeys, ad.traitValues);
-            if (ad.carriedGroceries > 0)
-                agent.AddToInventory(ItemType.Groceries, ad.carriedGroceries);
-            agentsByName[ad.agentName] = agent;
-        }
+        // TODO: V2 agent load — restore V2 agent state (home, job, stats) from save data.
 
-        // --- Pass 3: re-link agents to buildings ---
-        foreach (AgentSaveData ad in data.agents)
-        {
-            if (!agentsByName.TryGetValue(ad.agentName, out Agent agent)) continue;
-
-            // Restore home
-            if (ad.hasHome)
-            {
-                Vector3Int homePos = new Vector3Int(ad.homeTileX, ad.homeTileY, 0);
-                Building homeBuilding = buildingManager.GetBuildingAt(homePos);
-                if (homeBuilding is ResidentialBuilding res && res.DwellingUnits.Count > 0)
-                {
-                    DwellingUnit unit = res.DwellingUnits[0];
-                    unit.DwellingOccupancy.Add(agent);
-                    // Restore pantry from the saved building data
-                    if (buildingDataByPos.TryGetValue(homePos, out BuildingSaveData bd))
-                        unit.pantry.Add(ItemType.Groceries, bd.pantryGroceries);
-                    agent.AssignHome(homePos, unit);
-                }
-            }
-
-            // Restore job
-            if (ad.hasJob)
-            {
-                Vector3Int empPos = new Vector3Int(ad.employerX, ad.employerY, 0);
-                Building empBuilding = buildingManager.GetBuildingAt(empPos);
-                if (empBuilding is CommercialBuilding commercial)
-                {
-                    Shift shift = commercial.TryHire(agent);
-                    if (shift != null)
-                    {
-                        agent.employer      = commercial;
-                        agent.assignedShift = shift;
-                        agent.hasJob        = true;
-                    }
-                }
-            }
-        }
-
-        Debug.Log($"Game loaded. Day {data.time.currentDay}, {data.agents.Count} agents restored.");
+        Debug.Log($"Game loaded. Day {data.time.currentDay}, {data.buildings.Count} buildings restored.");
     }
 
     // -----------------------------------------------------------------------

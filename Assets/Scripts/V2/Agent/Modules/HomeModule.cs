@@ -53,6 +53,10 @@ public class HomeModule : IAgentModule
                 case "do_go_home":   HandleDoGoHome(agent);     break;
                 case "do_seek_home": HandleDoSeekHome(agent);   break;
                 case "arrived":      HandleArrived(agent, data); break;
+                case "path_failed":
+                    if (agent.CurrentTask is "home" or "home_seek")
+                        agent.CurrentTask = "";
+                    break;
             }
         };
         agent.OnEvent += eventHandler;
@@ -84,7 +88,12 @@ public class HomeModule : IAgentModule
         }
     }
 
-    public void SlowTick(AgentV2 _) { }
+    public void SlowTick(AgentV2 agent)
+    {
+        // Retry finding a home each slow tick while homeless and idle.
+        if (!HasHome && agent.CurrentTask == "")
+            HandleDoSeekHome(agent);
+    }
 
     public void Cleanup(AgentV2 agent)
     {
@@ -96,7 +105,7 @@ public class HomeModule : IAgentModule
     {
         homeTile          = tile;
         HomeWorldPosition = agent.BuildingsTilemap != null
-            ? agent.BuildingsTilemap.CellToWorld(tile)
+            ? agent.BuildingsTilemap.GetCellCenterWorld(tile)
             : new Vector3(tile.x, tile.y, 0f);
         DwellingUnit      = unit;
         HasHome           = true;
@@ -122,11 +131,11 @@ public class HomeModule : IAgentModule
     }
 
     public void AddCarriedGroceries(int amount)    => carriedGroceries += amount;
-    public void ConsumePantryGroceries(int amount)
+    public void ConsumePantryGroceries(AgentV2 agent, int amount)
     {
         if (DwellingUnit == null) return;
         DwellingUnit.pantry.Remove(ItemType.Groceries, amount);
-        // Stat stays in sync via HandleArrived refresh; also decrement immediately.
+        agent.SetStat("pantry_groceries", DwellingUnit.pantry.Get(ItemType.Groceries));
     }
 
     // ── Event handlers ─────────────────────────────────────────────────────────
@@ -162,6 +171,9 @@ public class HomeModule : IAgentModule
 
             // Claim the unit.
             unit.DwellingOccupancyV2.Add(agent);
+            // Give new residents starter groceries so they can cook immediately
+            // (without this, agents loop on seek_groceries before ever seeking work).
+            unit.pantry?.Add(ItemType.Groceries, 5);
             AssignHome(agent, homeTilePos, unit);
 
             agent.CurrentTask = "home";

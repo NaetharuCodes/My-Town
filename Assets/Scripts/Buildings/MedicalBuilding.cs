@@ -13,18 +13,11 @@ public abstract class MedicalBuilding : CommercialBuilding
     [Tooltip("Real seconds the agent spends receiving treatment.")]
     public float treatmentDuration = 15f;
 
-    protected List<Agent>   currentPatients   = new List<Agent>();
     protected List<AgentV2> currentPatientsV2 = new List<AgentV2>();
 
     /// <summary>Returns true if this building can treat the given severity.</summary>
     public abstract bool CanTreat(ConditionSeverity severity);
 
-    // ── V1 Agent overloads ─────────────────────────────────────────────────────
-    public abstract bool TryAdmit(Agent agent);
-    public abstract void DischargePatient(Agent agent);
-    public abstract void TreatPatient(Agent agent);
-
-    // ── V2 AgentV2 overloads ───────────────────────────────────────────────────
     public abstract bool TryAdmit(AgentV2 agent);
     public abstract void DischargePatient(AgentV2 agent);
     public abstract void TreatPatient(AgentV2 agent);
@@ -33,8 +26,6 @@ public abstract class MedicalBuilding : CommercialBuilding
     protected override void OnDestroy()
     {
         base.OnDestroy();
-        foreach (Agent patient in new List<Agent>(currentPatients))
-            DischargePatient(patient);
         foreach (AgentV2 patient in new List<AgentV2>(currentPatientsV2))
             DischargePatient(patient);
     }

@@ -21,9 +21,10 @@ using UnityEngine;
 public class WorkModule : IAgentModule
 {
     // ── Employment state ───────────────────────────────────────────────────────
-    public bool               HasJob        { get; private set; } = false;
-    public CommercialBuilding Employer      { get; private set; }
-    public Shift              AssignedShift { get; private set; }
+    public bool               HasJob             { get; private set; } = false;
+    public CommercialBuilding Employer           { get; private set; }
+    public Shift              AssignedShift      { get; private set; }
+    public bool               IsCurrentlyWorking => isAtWork;
 
     private bool isAtWork       = false;
     private int  lastCheckedHour = -1;
@@ -41,6 +42,10 @@ public class WorkModule : IAgentModule
                 case "do_seek_work":  HandleDoSeekWork(agent);    break;
                 case "do_go_to_work": HandleDoGoToWork(agent);    break;
                 case "arrived":       HandleArrived(agent, data); break;
+                case "path_failed":
+                    if (agent.CurrentTask == "work_travel")
+                        agent.CurrentTask = "";
+                    break;
             }
 
             // Another task displaced work travel — cancel movement intent.
@@ -70,6 +75,7 @@ public class WorkModule : IAgentModule
         if (AssignedShift != null && !AssignedShift.IsActiveAt(lastCheckedHour))
         {
             Employer.WorkerCheckOut(agent);
+            Employer.ExitV2(agent);
             isAtWork = false;
             agent.CurrentTask = "";
             agent.Tags.Remove("at_work");
@@ -81,6 +87,11 @@ public class WorkModule : IAgentModule
     public void SlowTick(AgentV2 agent)
     {
         UpdateWorkHoursTag(agent);
+
+        // Retry seeking work each slow tick while unemployed and idle.
+        // Handles the case where all vacancies were filled at last attempt but one has since opened.
+        if (!HasJob && agent.Tags.Contains("can_work") && agent.CurrentTask == "")
+            HandleDoSeekWork(agent);
     }
 
     public void Cleanup(AgentV2 agent)
@@ -88,6 +99,9 @@ public class WorkModule : IAgentModule
         agent.OnEvent -= eventHandler;
         if (agent.TimeManager != null && onHourChanged != null)
             agent.TimeManager.OnHourChanged -= onHourChanged;
+
+        if (isAtWork && Employer != null)
+            Employer.ExitV2(agent);
     }
 
     // ── Public API ─────────────────────────────────────────────────────────────
@@ -102,6 +116,9 @@ public class WorkModule : IAgentModule
 
     public void LoseJob(AgentV2 agent)
     {
+        if (isAtWork && Employer != null)
+            Employer.ExitV2(agent);
+
         AssignedShift?.Unassign(agent);
         Employer      = null;
         AssignedShift = null;
@@ -143,7 +160,10 @@ public class WorkModule : IAgentModule
         if (isAtWork) return;  // Already there.
 
         agent.CurrentTask = "work_travel";
-        agent.RaiseEvent("move_to", Employer.transform.position);
+        Vector3 dest = agent.BuildingsTilemap != null
+            ? agent.BuildingsTilemap.GetCellCenterWorld(Employer.gridPosition)
+            : new Vector3(Employer.gridPosition.x, Employer.gridPosition.y, 0f);
+        agent.RaiseEvent("move_to", dest);
     }
 
     private void HandleArrived(AgentV2 agent, object _)
@@ -151,6 +171,7 @@ public class WorkModule : IAgentModule
         if (agent.CurrentTask != "work_travel") return;
 
         Employer.WorkerCheckIn(agent);
+        Employer.EnterV2(agent);
         // TODO: Police/FireStation special case → "patrolling" tag instead of "at_work"
         isAtWork = true;
         agent.CurrentTask = "work";

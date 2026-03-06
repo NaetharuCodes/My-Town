@@ -1,6 +1,7 @@
+using System.Collections.Generic;
 using UnityEngine;
 
-public class BurgerStore : CommercialBuilding
+public class BurgerStore : CommercialBuilding, IHasInteriorView
 {
     [Header("Burger Store")]
     public int mealPrice = 10;
@@ -18,25 +19,6 @@ public class BurgerStore : CommercialBuilding
             wage = 280,
             payFrequency = PayFrequency.Weekly
         });
-    }
-
-    public override bool Interact(Agent agent)
-    {
-        if (!IsOpen())
-        {
-            Debug.Log($"{agent.agentName} tried to buy food but {buildingName} is closed.");
-            return false;
-        }
-
-        if (!agent.TrySpend(mealPrice))
-        {
-            Debug.Log($"{agent.agentName} can't afford food!");
-            return false;
-        }
-
-        agent.Feed(hungerRestored);
-        treasury += mealPrice;
-        return true;
     }
 
     public override bool Interact(AgentV2 agent)
@@ -57,5 +39,38 @@ public class BurgerStore : CommercialBuilding
         agent.GetModule<FoodModule>()?.RestoreHunger(agent, hungerRestored);
         treasury += mealPrice;
         return true;
+    }
+
+    // ── IHasInteriorView ──────────────────────────────────────────────────────
+
+    public string InteriorDisplayName => buildingName;
+
+    public List<InteriorAgentInfo> GetInteriorAgentInfo()
+    {
+        var result = new List<InteriorAgentInfo>();
+
+        foreach (AgentV2 agent in GetPresentV2Agents())
+        {
+            var work     = agent.GetModule<WorkModule>();
+            var food     = agent.GetModule<FoodModule>();
+            bool isWorker = work != null && work.Employer == this;
+
+            InteriorZone zone;
+            if (isWorker)
+                zone = work.IsCurrentlyWorking ? InteriorZone.Kitchen : InteriorZone.Counter;
+            else if (food != null && food.IsEating)
+                zone = InteriorZone.Seating;
+            else
+                zone = InteriorZone.Queue;
+
+            result.Add(new InteriorAgentInfo
+            {
+                name     = agent.Name,
+                zone     = zone,
+                isWorker = isWorker,
+            });
+        }
+
+        return result;
     }
 }

@@ -78,42 +78,6 @@ public class CommercialBuilding : Building
 
     // --- Hiring ---
 
-    // Assigns the agent to the first shift with a vacancy.
-    // Returns the shift they were assigned to, or null if no vacancy.
-    public Shift TryHire(Agent agent)
-    {
-        foreach (var shift in shifts)
-            if (shift.TryAssign(agent))
-                return shift;
-        return null;
-    }
-
-    // Returns the shift this agent is assigned to, or null.
-    public Shift GetShiftFor(Agent agent)
-    {
-        foreach (var shift in shifts)
-            if (shift.AssignedWorkers.Contains(agent))
-                return shift;
-        return null;
-    }
-
-    // --- Worker presence ---
-
-    public void WorkerCheckIn(Agent agent)
-    {
-        foreach (var shift in shifts)
-            if (shift.AssignedWorkers.Contains(agent))
-                shift.CheckIn(agent);
-    }
-
-    public void WorkerCheckOut(Agent agent)
-    {
-        foreach (var shift in shifts)
-            shift.CheckOut(agent);
-    }
-
-    // ── V2 AgentV2 overloads ───────────────────────────────────────────────────
-
     public Shift TryHire(AgentV2 agent)
     {
         foreach (var shift in shifts)
@@ -163,20 +127,6 @@ public class CommercialBuilding : Building
 
     void PayShift(Shift shift)
     {
-        foreach (var worker in shift.AssignedWorkers)
-        {
-            if (treasury >= shift.wage)
-            {
-                treasury -= shift.wage;
-                worker.ReceiveWage(shift.wage);
-            }
-            else
-            {
-                EventLog.LogMoney($"{buildingName} can't afford to pay {worker.agentName}!");
-                Debug.Log($"{buildingName} can't afford to pay {worker.agentName}!");
-            }
-        }
-
         foreach (var worker in shift.AssignedWorkersV2)
         {
             if (treasury >= shift.wage)
@@ -191,18 +141,4 @@ public class CommercialBuilding : Building
         }
     }
 
-    // Returns the names of workers assigned to the first shift (for saving).
-    public List<string> GetAssignedWorkerNames()
-    {
-        var names = new List<string>();
-        if (shifts.Count > 0)
-            foreach (var worker in shifts[0].AssignedWorkers)
-                names.Add(worker.agentName);
-        return names;
-    }
-
-    public override bool Interact(Agent agent)
-    {
-        return false;
-    }
 }

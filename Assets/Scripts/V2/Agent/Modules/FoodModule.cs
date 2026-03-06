@@ -28,10 +28,11 @@ public class FoodModule : IAgentModule
     // ── State ──────────────────────────────────────────────────────────────────
     private bool  isCooking = false;
     private float cookTimer = 0f;
-    private bool  isEating  = false;
+    public  bool  IsEating  { get; private set; } = false;
     private float eatTimer  = 0f;
 
     private BurgerStore  currentStore;
+    private BurgerStore  eatingStore;   // store where agent is currently sitting and eating
     private Supermarket  currentMarket;
 
     private Action<string, object> eventHandler;
@@ -39,7 +40,10 @@ public class FoodModule : IAgentModule
     // ── IAgentModule ───────────────────────────────────────────────────────────
     public void Initialize(AgentV2 agent)
     {
-        agent.SetStat("hunger", 0f);
+        // Randomise starting hunger and metabolic rate so agents don't all
+        // reach the hunger threshold (and head to the store) simultaneously.
+        agent.SetStat("hunger", UnityEngine.Random.Range(0f, 30f));
+        HungerRatePerSlowTick = UnityEngine.Random.Range(0.4f, 0.6f);
 
         eventHandler = (evt, data) =>
         {
@@ -49,6 +53,7 @@ public class FoodModule : IAgentModule
                 case "do_cook":           HandleDoCook(agent);          break;
                 case "do_seek_groceries": HandleDoSeekGroceries(agent); break;
                 case "arrived":           HandleArrived(agent, data);   break;
+                case "path_failed":       CancelTravelIntent(agent);    break;
             }
 
             // If another task takes over while we are mid-travel, abandon our intent
@@ -73,7 +78,7 @@ public class FoodModule : IAgentModule
             if (cookTimer <= 0f) FinishCooking(agent);
         }
 
-        if (isEating)
+        if (IsEating)
         {
             eatTimer -= Time.deltaTime;
             if (eatTimer <= 0f) FinishEating(agent);
@@ -87,11 +92,32 @@ public class FoodModule : IAgentModule
         else if (agent.Tags.Contains("life_toddler")) rate = 0.25f;
 
         agent.ModifyStat("hunger", rate, 0f, 100f);
+
+        // Retry food-seeking each slow tick while idle.
+        // This handles the case where stores were closed at last attempt but have since opened.
+        if (agent.CurrentTask != "") return;
+
+        if (agent.GetStat("hunger") >= 60f && !IsEating && !isCooking)
+        {
+            // Mirror DecisionModule logic: cook at home if stocked, otherwise eat out.
+            if (agent.Tags.Contains("can_cook") && agent.GetStat("pantry_groceries") > 0f)
+                HandleDoCook(agent);
+            else
+                HandleDoEat(agent);
+        }
+        else if (agent.GetStat("pantry_groceries") < 2f && agent.Tags.Contains("can_shop"))
+            HandleDoSeekGroceries(agent);
     }
 
     public void Cleanup(AgentV2 agent)
     {
         agent.OnEvent -= eventHandler;
+
+        if (eatingStore != null)
+        {
+            eatingStore.ExitV2(agent);
+            eatingStore = null;
+        }
     }
 
     // ── Public API (called by other modules, e.g. to feed dependents) ──────────
@@ -120,6 +146,20 @@ public class FoodModule : IAgentModule
 
     private void HandleDoCook(AgentV2 agent)
     {
+        // If pantry is actually empty (stat may be stale), fall back to eating out.
+        if (agent.GetStat("pantry_groceries") <= 0f)
+        {
+            HandleDoEat(agent);
+            return;
+        }
+
+        // 5% chance to eat out instead of cooking at home.
+        if (UnityEngine.Random.value < 0.05f)
+        {
+            HandleDoEat(agent);
+            return;
+        }
+
         if (agent.Tags.Contains("at_home"))
         {
             StartCooking(agent);
@@ -157,9 +197,15 @@ public class FoodModule : IAgentModule
         {
             case "eat":
                 if (currentStore != null && currentStore.Interact(agent))
+                {
+                    currentStore.EnterV2(agent);
+                    eatingStore = currentStore;
                     StartEating(agent);
+                }
                 else
+                {
                     agent.CurrentTask = "";
+                }
                 currentStore = null;
                 break;
 
@@ -197,7 +243,7 @@ public class FoodModule : IAgentModule
 
     private void StartEating(AgentV2 agent)
     {
-        isEating = true;
+        IsEating = true;
         eatTimer = EatDuration;
     }
 
@@ -206,7 +252,7 @@ public class FoodModule : IAgentModule
         isCooking = false;
 
         // Consume one unit of groceries from the home pantry.
-        agent.GetModule<HomeModule>()?.ConsumePantryGroceries(1);
+        agent.GetModule<HomeModule>()?.ConsumePantryGroceries(agent, 1);
 
         // Feed self.
         RestoreHunger(agent, CookHungerRestored);
@@ -220,7 +266,14 @@ public class FoodModule : IAgentModule
 
     private void FinishEating(AgentV2 agent)
     {
-        isEating = false;
+        IsEating = false;
+
+        if (eatingStore != null)
+        {
+            eatingStore.ExitV2(agent);
+            eatingStore = null;
+        }
+
         agent.CurrentTask = "";
 
         // Head home after eating out.
@@ -231,7 +284,7 @@ public class FoodModule : IAgentModule
     private static Vector3 TileToWorld(AgentV2 agent, Vector3Int tile)
     {
         return agent.BuildingsTilemap != null
-            ? agent.BuildingsTilemap.CellToWorld(tile)
+            ? agent.BuildingsTilemap.GetCellCenterWorld(tile)
             : new Vector3(tile.x, tile.y, 0f);
     }
 }

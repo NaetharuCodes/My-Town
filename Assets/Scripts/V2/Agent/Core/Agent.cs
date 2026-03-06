@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 
+// V2 Agent
+
+
 public class AgentV2 : MonoBehaviour
 {
     public string Id { get; private set; }
@@ -17,9 +20,9 @@ public class AgentV2 : MonoBehaviour
 
     // Scene-level dependencies — set via Initialise() before adding modules.
     public BuildingManager BuildingManager { get; private set; }
-    public TimeManager     TimeManager     { get; private set; }
-    public Pathfinder      Pathfinder      { get; private set; }
-    public Tilemap         BuildingsTilemap { get; private set; }
+    public TimeManager TimeManager { get; private set; }
+    public Pathfinder Pathfinder { get; private set; }
+    public Tilemap BuildingsTilemap { get; private set; }
 
     public event Action<string, object> OnEvent;
 
@@ -31,10 +34,10 @@ public class AgentV2 : MonoBehaviour
     // Call this before adding any modules so they can access scene references.
     public void Initialise(BuildingManager bm, Pathfinder pf, Tilemap tilemap, TimeManager tm)
     {
-        BuildingManager  = bm;
-        Pathfinder       = pf;
+        BuildingManager = bm;
+        Pathfinder = pf;
         BuildingsTilemap = tilemap;
-        TimeManager      = tm;
+        TimeManager = tm;
     }
 
     private List<IAgentModule> modules;
@@ -80,6 +83,12 @@ public class AgentV2 : MonoBehaviour
 
     private void Start()
     {
+        if (AgentScheduler.Instance == null)
+        {
+            var go = new GameObject("AgentScheduler");
+            go.AddComponent<AgentScheduler>();
+            Debug.LogWarning("AgentV2: AgentScheduler was missing from scene — created automatically. Add it manually for Inspector configuration.");
+        }
         AgentScheduler.Instance.Register(this);
     }
 

@@ -120,14 +120,14 @@ public class BuildingPlacer : MonoBehaviour
         if (building is ResidentialBuilding res)
         {
             foreach (var unit in res.DwellingUnits)
-                foreach (Agent a in new List<Agent>(unit.DwellingOccupancy))
-                    a.ClearHome();
+                foreach (AgentV2 a in new List<AgentV2>(unit.DwellingOccupancyV2))
+                    a.GetModule<HomeModule>()?.ClearHome(a);
         }
         else if (building is CommercialBuilding com)
         {
             foreach (var shift in com.shifts)
-                foreach (Agent a in new List<Agent>(shift.AssignedWorkers))
-                    a.LoseJob();
+                foreach (AgentV2 a in new List<AgentV2>(shift.AssignedWorkersV2))
+                    a.GetModule<WorkModule>()?.LoseJob(a);
         }
 
         string name = building.buildingName;

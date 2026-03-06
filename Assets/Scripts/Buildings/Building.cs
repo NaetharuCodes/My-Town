@@ -35,15 +35,8 @@ public class Building : MonoBehaviour
     private TimeManager _fireTimeManager;
     private BuildingManager _fireBuildingManager;
 
-    // --- Allocated Roles (persistent, not presence-based) ---
-    private Dictionary<string, List<Agent>> allocatedRoles = new();
-    private Dictionary<string, int> roleCapacities = new();
-
     // --- Physical Presence (who is here right now) ---
-    private HashSet<Agent> presentAgents = new();
-
-    public int CurrentPresence => presentAgents.Count;
-    public bool HasCapacity => presentAgents.Count < maxOccupancy;
+    private HashSet<AgentV2> presentV2Agents = new();
 
     protected virtual void Update()
     {
@@ -103,60 +96,22 @@ public class Building : MonoBehaviour
         Debug.Log($"Fire at {buildingName} ({gridPosition}) has been extinguished.");
     }
 
-    // --- The key method subclasses will override ---
-    public virtual bool Interact(Agent agent)
-    {
-        // Base implementation does nothing
-        // Subclasses define what happens when an agent interacts
-        return false;
-    }
-
-    // --- Role Management (from BuildingData) ---
-    public void DefineRole(string roleName, int maxCount)
-    {
-        roleCapacities[roleName] = maxCount;
-        if (!allocatedRoles.ContainsKey(roleName))
-            allocatedRoles[roleName] = new List<Agent>();
-    }
-
-    public bool HasRoleVacancy(string roleName)
-    {
-        if (!roleCapacities.ContainsKey(roleName)) return false;
-        if (!allocatedRoles.ContainsKey(roleName)) return true;
-        return allocatedRoles[roleName].Count < roleCapacities[roleName];
-    }
-
-    public bool AllocateRole(string roleName, Agent agent)
-    {
-        if (!HasRoleVacancy(roleName)) return false;
-        allocatedRoles[roleName].Add(agent);
-        return true;
-    }
-
-    public void DeallocateRole(string roleName, Agent agent)
-    {
-        if (allocatedRoles.ContainsKey(roleName))
-            allocatedRoles[roleName].Remove(agent);
-    }
-
-    public List<Agent> GetAgentsInRole(string roleName)
-    {
-        return allocatedRoles.ContainsKey(roleName)
-            ? allocatedRoles[roleName]
-            : new List<Agent>();
-    }
-
     // --- Physical Presence ---
-    public bool Enter(Agent agent)
+    public void EnterV2(AgentV2 agent)
     {
-        if (!HasCapacity) return false;
-        presentAgents.Add(agent);
-        return true;
+        if (agent != null) presentV2Agents.Add(agent);
     }
 
-    public void Exit(Agent agent)
+    public void ExitV2(AgentV2 agent)
     {
-        presentAgents.Remove(agent);
+        if (agent != null) presentV2Agents.Remove(agent);
+    }
+
+    public IReadOnlyCollection<AgentV2> GetPresentV2Agents() => presentV2Agents;
+
+    protected virtual void OnDestroy()
+    {
+        presentV2Agents.Clear();
     }
 
     // --- Pricing ---

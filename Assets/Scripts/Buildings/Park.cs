@@ -4,6 +4,4 @@
 public class Park : Building
 {
     public bool isMunicipal = true;
-
-    public override bool Interact(Agent agent) => true;
 }

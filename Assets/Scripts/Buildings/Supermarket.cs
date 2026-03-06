@@ -21,56 +21,6 @@ public class Supermarket : CommercialBuilding
         });
     }
 
-    public override bool Interact(Agent agent)
-    {
-        if (!IsOpen())
-        {
-            Debug.Log($"{agent.agentName} tried to shop but {buildingName} is closed.");
-            return false;
-        }
-
-        // Thief trait: roll to steal instead of paying.
-        if (agent.personality.HasTrait("thief") && agent.personality.RollTrait("thief"))
-        {
-            agent.AddToInventory(ItemType.Groceries, groceriesPerPack);
-            EventLog.LogDanger($"{agent.agentName} stole from {buildingName}!");
-            Debug.Log($"{agent.agentName} STOLE {groceriesPerPack} groceries from {buildingName}!");
-
-            // 40% chance of being caught regardless of thief level.
-            if (Random.value < 0.4f)
-            {
-                EventLog.LogDanger($"{agent.agentName} was caught stealing – police alerted!");
-                Debug.Log($"{agent.agentName} was caught stealing! Alerting police...");
-                AlertPolice(agent);
-            }
-            return true;
-        }
-
-        // Normal purchase.
-        if (!agent.TrySpend(groceryPackCost))
-        {
-            Debug.Log($"{agent.agentName} can't afford groceries.");
-            return false;
-        }
-
-        agent.AddToInventory(ItemType.Groceries, groceriesPerPack);
-        treasury += groceryPackCost;
-        Debug.Log($"{agent.agentName} bought {groceriesPerPack} groceries. Now carrying: {agent.CarriedCount(ItemType.Groceries)}");
-        return true;
-    }
-
-    void AlertPolice(Agent criminal)
-    {
-        if (criminal.isBeingChased) return; // already being pursued
-
-        PoliceStation station = FindFirstObjectByType<PoliceStation>();
-        if (station != null)
-            station.DispatchOfficer(criminal);
-        else
-            EventLog.LogWarning($"No police in town — {criminal.agentName} gets away!");
-            Debug.Log($"No police station in town — {criminal.agentName} gets away!");
-    }
-
     public override bool Interact(AgentV2 agent)
     {
         if (!IsOpen())

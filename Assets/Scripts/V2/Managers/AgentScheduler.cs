@@ -2,8 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // Drives SlowTick for all AgentV2 instances, staggered across frames.
-// All agents are guaranteed one SlowTick per slowTickInterval seconds.
-// At 60fps with 200 agents and a 1s interval: ~4 agents/frame — negligible cost.
+// Each agent is guaranteed exactly one SlowTick per slowTickInterval seconds.
+// Uses an accumulator so small populations aren't over-ticked each frame.
 public class AgentScheduler : MonoBehaviour
 {
     public static AgentScheduler Instance;
@@ -12,7 +12,8 @@ public class AgentScheduler : MonoBehaviour
     [SerializeField] private float slowTickInterval = 1f;
 
     private readonly List<AgentV2> agents = new();
-    private int currentIndex = 0;
+    private int   currentIndex  = 0;
+    private float accumulator   = 0f;
 
     private void Awake()
     {
@@ -41,13 +42,16 @@ public class AgentScheduler : MonoBehaviour
     {
         if (agents.Count == 0) return;
 
-        // Spread all agents evenly across the interval.
-        int perFrame = Mathf.Max(1, Mathf.CeilToInt(agents.Count * Time.deltaTime / slowTickInterval));
+        // Accumulate fractional work. Each second we want to tick each agent once,
+        // so we advance by agents.Count / slowTickInterval per second.
+        accumulator += agents.Count * Time.deltaTime / slowTickInterval;
 
-        for (int i = 0; i < perFrame; i++)
+        // Process whole ticks only — no Mathf.Max(1) which would over-tick small populations.
+        while (accumulator >= 1f)
         {
             agents[currentIndex].SlowTick();
             currentIndex = (currentIndex + 1) % agents.Count;
+            accumulator -= 1f;
         }
     }
 }

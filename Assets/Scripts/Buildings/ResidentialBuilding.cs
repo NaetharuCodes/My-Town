@@ -5,71 +5,10 @@ public class ResidentialBuilding : Building
 {
     public List<DwellingUnit> DwellingUnits = new List<DwellingUnit>();
 
-    private TimeManager timeManager;
-
-    void Start()
-    {
-        timeManager = FindFirstObjectByType<TimeManager>();
-        if (timeManager != null)
-            timeManager.OnNewDay += CollectRent;
-    }
-
-    void OnDestroy()
-    {
-        if (timeManager != null)
-            timeManager.OnNewDay -= CollectRent;
-    }
-
-    void CollectRent(int day)
-    {
-        foreach (DwellingUnit unit in DwellingUnits)
-        {
-            // Iterate a copy — eviction modifies DwellingOccupancy mid-loop.
-            foreach (Agent agent in new List<Agent>(unit.DwellingOccupancy))
-            {
-                // Only charge adults; children and dependents are covered by the household.
-                if (!agent.CanSeekWork()) continue;
-
-                if (agent.ChargeRent(unit.rentPerDay))
-                    treasury += unit.rentPerDay;
-            }
-        }
-    }
-
-    public override bool Interact(Agent agent)
-    {
-        foreach (DwellingUnit unit in DwellingUnits)
-        {
-            if (unit.DwellingOccupancy.Count == 0)
-            {
-                unit.DwellingOccupancy.Add(agent);
-                agent.AssignHome(gridPosition, unit);
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    // Returns occupant names and pantry count for the first dwelling unit.
-    public (List<string> occupantNames, int pantryGroceries) GetSaveData()
-    {
-        if (DwellingUnits.Count == 0)
-            return (new List<string>(), 0);
-        DwellingUnit unit = DwellingUnits[0];
-        var names = new List<string>();
-        foreach (Agent a in unit.DwellingOccupancy)
-            names.Add(a.agentName);
-        return (names, unit.pantry.Get(ItemType.Groceries));
-    }
-
     public bool HasVacantUnit()
     {
         foreach (DwellingUnit unit in DwellingUnits)
-        {
-            if (unit.DwellingOccupancy.Count == 0)
-                return true;
-        }
+            if (unit.DwellingOccupancyV2.Count == 0) return true;
         return false;
     }
 
@@ -80,21 +19,10 @@ public class ResidentialBuilding : Building
         DwellingUnit fallback = null;
         foreach (DwellingUnit unit in DwellingUnits)
         {
-            if (unit.DwellingOccupancy.Count > 0) continue;
+            if (unit.DwellingOccupancyV2.Count > 0) continue;
             if (unit.NumberOfBedrooms >= familySize) return unit;
             if (fallback == null) fallback = unit;
         }
         return fallback;
     }
-
-    // Assigns all family members to the given dwelling unit.
-    public void AssignFamily(Family family, DwellingUnit unit)
-    {
-        foreach (Agent member in family.members)
-        {
-            unit.DwellingOccupancy.Add(member);
-            member.AssignHome(gridPosition, unit);
-        }
-    }
-
 }

@@ -25,7 +25,7 @@ public class SleepModule : IAgentModule
 {
     // ── Sleep schedule (adjustable) ────────────────────────────────────────────
     public int SleepHour { get; private set; } = 23;   // default: 11 pm
-    public int WakeHour  { get; private set; } = 7;    // default: 7 am
+    public int WakeHour  { get; private set; } = 6;    // default: 6 am
 
     // ── Config ─────────────────────────────────────────────────────────────────
     private const float TirednessPerHour   = 5f;    // +5/hr awake  → hits 80 after ~16 hrs
@@ -53,6 +53,11 @@ public class SleepModule : IAgentModule
             {
                 case "do_sleep": HandleDoSleep(agent);      break;
                 case "arrived":  HandleArrived(agent, data); break;
+                case "path_failed":
+                    // Can't path home to sleep — sleep in place instead.
+                    if (agent.CurrentTask == "sleep_travel")
+                        BeginSleep(agent);
+                    break;
             }
             if (evt.StartsWith("do_") && evt != "do_sleep")
                 CancelTravelIntent(agent);

@@ -37,6 +37,7 @@ public class SocialModule : IAgentModule
             {
                 case "do_socialise": HandleDoSocialise(agent);      break;
                 case "arrived":      HandleArrived(agent, data);    break;
+                case "path_failed":  CancelTravelIntent(agent);     break;
             }
 
             // Another task taking priority — cancel any pending travel to the park.
@@ -114,6 +115,6 @@ public class SocialModule : IAgentModule
 
     private static Vector3 TileToWorld(AgentV2 agent, Vector3Int tile)
         => agent.BuildingsTilemap != null
-            ? agent.BuildingsTilemap.CellToWorld(tile)
+            ? agent.BuildingsTilemap.GetCellCenterWorld(tile)
             : new Vector3(tile.x, tile.y, 0f);
 }

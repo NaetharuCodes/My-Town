@@ -6,7 +6,7 @@ public class Family
     public string familyId;   // GUID — used to reconnect members on save/load
     public string familyName; // shared surname
     public FamilyType familyType;
-    public List<Agent> members = new List<Agent>();
+    public List<AgentV2> membersV2 = new List<AgentV2>();
 
     public Family(string familyName, FamilyType type)
     {
@@ -15,8 +15,8 @@ public class Family
         familyId = Guid.NewGuid().ToString();
     }
 
-    public void AddMember(Agent agent)
+    public void AddMemberV2(AgentV2 agent)
     {
-        members.Add(agent);
+        membersV2.Add(agent);
     }
 }

@@ -13,7 +13,6 @@ public class DwellingUnit
 
     public int rentPerDay = 40;
 
-    public List<Agent>   DwellingOccupancy   = new List<Agent>();
     public List<AgentV2> DwellingOccupancyV2 = new List<AgentV2>();
 
     // Food and goods stored at home. Stocked by grocery runs; consumed when cooking.

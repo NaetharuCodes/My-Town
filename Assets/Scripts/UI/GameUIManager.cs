@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -35,6 +36,7 @@ public class GameUIManager : MonoBehaviour
     public Sprite preschoolIcon;
 
     // ── live UI references ────────────────────────────────────────────────────
+    private Canvas     mainCanvas;
     private Text       timeText;
     private GameObject buildPanel;
     private Button[]   speedButtons;
@@ -53,6 +55,40 @@ public class GameUIManager : MonoBehaviour
     private Text       inspectContent;     // scrollable content text
     private string[]   inspectTabContent;  // pre-built content strings per tab
     private int        activeTabIdx;
+
+    // Interior overlay
+    private GameObject                      interiorOverlayRoot;
+    private Coroutine                       interiorRefreshCoroutine;
+    private Dictionary<string, GameObject>  interiorDots = new();   // agentName → dot GO
+
+    // Interior zone panels (cached for dot parenting)
+    private RectTransform interiorKitchenZone;
+    private RectTransform interiorCounterZone;
+    private RectTransform interiorQueueZone;
+    private RectTransform interiorSeatingZone;
+
+    // Slot positions (normalised 0-1 within each zone's rect)
+    private static readonly Vector2[] KitchenSlots = {
+        new(0.25f, 0.5f), new(0.5f, 0.5f), new(0.75f, 0.5f)
+    };
+    private static readonly Vector2[] CounterSlots = {
+        new(0.3f, 0.5f), new(0.7f, 0.5f)
+    };
+    private static readonly Vector2[] QueueSlots = {
+        new(0.10f, 0.5f), new(0.26f, 0.5f), new(0.42f, 0.5f),
+        new(0.58f, 0.5f), new(0.74f, 0.5f), new(0.90f, 0.5f)
+    };
+    private static readonly Vector2[] SeatingSlots = {
+        new(0.12f, 0.65f), new(0.25f, 0.65f),
+        new(0.42f, 0.65f), new(0.55f, 0.65f),
+        new(0.72f, 0.65f), new(0.85f, 0.65f),
+        new(0.30f, 0.25f), new(0.65f, 0.25f),
+    };
+
+    // Dot colours
+    private static readonly Color DotWorker  = new Color(0.29f, 0.62f, 1.00f); // blue
+    private static readonly Color DotQueue   = new Color(1.00f, 0.55f, 0.26f); // orange
+    private static readonly Color DotEating  = new Color(0.32f, 0.83f, 0.48f); // green
 
     // ── colour palette ────────────────────────────────────────────────────────
     private static readonly Color PanelBg    = new Color(0.10f, 0.10f, 0.12f, 0.92f);
@@ -83,10 +119,10 @@ public class GameUIManager : MonoBehaviour
 
         EnsureEventSystem();
 
-        Canvas canvas = BuildCanvas();
-        BuildTopBar(canvas);
-        BuildBottomBar(canvas);
-        BuildInspectModal(canvas);
+        mainCanvas = BuildCanvas();
+        BuildTopBar(mainCanvas);
+        BuildBottomBar(mainCanvas);
+        BuildInspectModal(mainCanvas);
 
         if (selectionManager != null)
         {
@@ -467,40 +503,25 @@ public class GameUIManager : MonoBehaviour
         inspectContent = contentText;
     }
 
-    void ShowInspectModal(Building building, List<Agent> agents)
+    void ShowInspectModal(Building building)
     {
-        // Nothing to show
-        if (building == null && (agents == null || agents.Count == 0))
+        if (building == null) return;
+
+        // Interior-capable buildings get the schematic overlay instead.
+        if (building is IHasInteriorView interiorBuilding)
+        {
+            OpenInteriorOverlay(interiorBuilding);
             return;
+        }
 
         // ── Build tab labels + content strings ────────────────────────────────
-        var labels   = new List<string>();
-        var contents = new List<string>();
-
-        if (building != null)
-        {
-            labels.Add(building.buildingName);
-            contents.Add(BuildingInfoText(building));
-        }
-
-        if (agents != null)
-        {
-            foreach (Agent a in agents)
-            {
-                // Use first name only to keep tabs compact
-                string firstName = a.agentName.Contains(' ')
-                    ? a.agentName.Split(' ')[0]
-                    : a.agentName;
-                labels.Add(firstName);
-                contents.Add(AgentInfoText(a));
-            }
-        }
+        var labels   = new List<string> { building.buildingName };
+        var contents = new List<string> { BuildingInfoText(building) };
 
         inspectTabContent = contents.ToArray();
 
-        // ── Title: building name, or agent name if no building ─────────────────
-        inspectTitle.text = building != null ? building.buildingName
-            : (agents != null && agents.Count > 0 ? agents[0].agentName : "");
+        // ── Title ──────────────────────────────────────────────────────────────
+        inspectTitle.text = building.buildingName;
 
         // ── Rebuild tab buttons ────────────────────────────────────────────────
         foreach (Button old in inspectTabs)
@@ -549,6 +570,7 @@ public class GameUIManager : MonoBehaviour
     {
         if (inspectBackdrop != null) inspectBackdrop.SetActive(false);
         if (inspectModal    != null) inspectModal.SetActive(false);
+        CloseInteriorOverlay();
     }
 
     // ── Info text builders ────────────────────────────────────────────────────
@@ -565,7 +587,7 @@ public class GameUIManager : MonoBehaviour
             int totalBedrooms  = 0;
             foreach (var unit in res.DwellingUnits)
             {
-                totalOccupants += unit.DwellingOccupancy.Count;
+                totalOccupants += unit.DwellingOccupancyV2.Count;
                 totalBedrooms  += unit.NumberOfBedrooms;
             }
 
@@ -585,30 +607,18 @@ public class GameUIManager : MonoBehaviour
                 if (res.DwellingUnits.Count > 1)
                     sb.AppendLine($"── Unit ({unit.NumberOfBedrooms} bed) ──────────");
 
-                if (unit.DwellingOccupancy.Count == 0)
+                if (unit.DwellingOccupancyV2.Count == 0)
                 {
                     sb.AppendLine("  (vacant)");
                 }
                 else
                 {
-                    // Family name / type header
-                    Family fam = unit.DwellingOccupancy[0].family;
-                    if (fam != null)
-                        sb.AppendLine($"  {fam.familyName} family · {FormatFamilyType(fam.familyType)}");
-
-                    // Each resident on their own line
-                    foreach (Agent occupant in unit.DwellingOccupancy)
+                    foreach (AgentV2 occupant in unit.DwellingOccupancyV2)
                     {
-                        string firstName = occupant.agentName.Contains(' ')
-                            ? occupant.agentName.Split(' ')[0]
-                            : occupant.agentName;
-                        string roleTag = occupant.familyRole switch {
-                            FamilyRole.Head    => "Head",
-                            FamilyRole.Partner => "Partner",
-                            FamilyRole.Child   => "Child",
-                            _                  => occupant.familyRole.ToString()
-                        };
-                        sb.AppendLine($"  {firstName}  {FormatLifeStage(occupant.lifeStage)}, {occupant.ageInYears}  [{roleTag}]");
+                        string firstName = occupant.Name.Contains(' ')
+                            ? occupant.Name.Split(' ')[0]
+                            : occupant.Name;
+                        sb.AppendLine($"  {firstName}");
                     }
                 }
 
@@ -633,9 +643,9 @@ public class GameUIManager : MonoBehaviour
             {
                 int endHour = (shift.startHour + shift.durationHours) % 24;
                 sb.AppendLine($"Teachers {shift.startHour:00}:00–{endHour:00}:00");
-                sb.AppendLine($"  Filled: {shift.AssignedWorkers.Count}/{shift.workersRequired}");
-                foreach (Agent w in shift.AssignedWorkers)
-                    sb.AppendLine($"    {w.agentName}");
+                sb.AppendLine($"  Filled: {shift.AssignedWorkersV2.Count}/{shift.workersRequired}");
+                foreach (AgentV2 w in shift.AssignedWorkersV2)
+                    sb.AppendLine($"    {w.Name}");
             }
         }
         else if (b is CommercialBuilding com)
@@ -651,9 +661,9 @@ public class GameUIManager : MonoBehaviour
             {
                 int endHour = (shift.startHour + shift.durationHours) % 24;
                 sb.AppendLine($"Shift {shift.startHour:00}:00–{endHour:00}:00");
-                sb.AppendLine($"  Workers: {shift.AssignedWorkers.Count}/{shift.workersRequired}");
-                foreach (Agent w in shift.AssignedWorkers)
-                    sb.AppendLine($"    {w.agentName}");
+                sb.AppendLine($"  Workers: {shift.AssignedWorkersV2.Count}/{shift.workersRequired}");
+                foreach (AgentV2 w in shift.AssignedWorkersV2)
+                    sb.AppendLine($"    {w.Name}");
             }
         }
         else
@@ -666,50 +676,6 @@ public class GameUIManager : MonoBehaviour
 
         sb.AppendLine();
         sb.Append($"Grid: ({b.gridPosition.x}, {b.gridPosition.y})");
-        return sb.ToString();
-    }
-
-    string AgentInfoText(Agent a)
-    {
-        var sb = new System.Text.StringBuilder();
-
-        // Identity
-        sb.AppendLine($"{FormatLifeStage(a.lifeStage)}, {a.ageInYears}");
-        sb.AppendLine("──────────────────────");
-
-        // Family
-        if (a.family != null)
-        {
-            sb.AppendLine($"{a.family.familyName} family · {FormatFamilyType(a.family.familyType)}");
-            sb.AppendLine($"Role: {a.familyRole}");
-            foreach (Agent m in a.family.members)
-            {
-                if (m == a) continue;
-                sb.AppendLine($"  {m.agentName} ({m.familyRole})");
-            }
-        }
-        else
-        {
-            sb.AppendLine("No family");
-        }
-
-        sb.AppendLine();
-
-        // Needs
-        sb.AppendLine($"Hunger:  {NeedsBar(a.hunger)}  {a.hunger:0}%");
-        sb.AppendLine($"Lonely:  {NeedsBar(a.loneliness)}  {a.loneliness:0}%");
-        sb.AppendLine();
-
-        // Finances & employment
-        sb.AppendLine($"Balance: ${a.bankBalance}");
-        sb.AppendLine($"Job:     {(a.hasJob && a.employer != null ? a.employer.buildingName : "None")}");
-        sb.AppendLine($"School:  {(a.isEnrolled && a.enrolledSchool != null ? a.enrolledSchool.buildingName : "None")}");
-        sb.AppendLine($"Home:    {(a.hasHome ? $"({a.homeTile.x},{a.homeTile.y})" : "None")}");
-        sb.AppendLine();
-
-        // State & traits
-        sb.AppendLine($"State:   {a.currentState}");
-        sb.Append($"Traits:  {a.personality}");
         return sb.ToString();
     }
 
@@ -846,6 +812,344 @@ public class GameUIManager : MonoBehaviour
 
         return go;
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Interior overlay
+    // ─────────────────────────────────────────────────────────────────────────
+
+    void OpenInteriorOverlay(IHasInteriorView building)
+    {
+        CloseInteriorOverlay();  // close any previously open overlay
+
+        if (mainCanvas == null) return;
+
+        BuildInteriorPanel(mainCanvas, building);
+        interiorRefreshCoroutine = StartCoroutine(InteriorRefreshLoop(building));
+    }
+
+    void CloseInteriorOverlay()
+    {
+        if (interiorRefreshCoroutine != null)
+        {
+            StopCoroutine(interiorRefreshCoroutine);
+            interiorRefreshCoroutine = null;
+        }
+
+        if (interiorOverlayRoot != null)
+        {
+            Destroy(interiorOverlayRoot);
+            interiorOverlayRoot  = null;
+            interiorKitchenZone  = null;
+            interiorCounterZone  = null;
+            interiorQueueZone    = null;
+            interiorSeatingZone  = null;
+        }
+
+        interiorDots.Clear();
+    }
+
+    void BuildInteriorPanel(Canvas canvas, IHasInteriorView building)
+    {
+        const float modalW   = 720f;
+        const float modalH   = 520f;
+        const float titleH   = 44f;
+        const float statusH  = 30f;
+        const float padding  = 10f;
+
+        // ── Root (full-screen backdrop) ────────────────────────────────────────
+        interiorOverlayRoot = new GameObject("InteriorOverlay");
+        interiorOverlayRoot.transform.SetParent(canvas.transform, false);
+
+        Image bdImg = interiorOverlayRoot.AddComponent<Image>();
+        bdImg.color = new Color(0f, 0f, 0f, 0.6f);
+        RectTransform bdr = interiorOverlayRoot.GetComponent<RectTransform>();
+        bdr.anchorMin = Vector2.zero;
+        bdr.anchorMax = Vector2.one;
+        bdr.offsetMin = bdr.offsetMax = Vector2.zero;
+
+        // Clicking the backdrop closes the overlay.
+        Button bdBtn = interiorOverlayRoot.AddComponent<Button>();
+        bdBtn.targetGraphic = bdImg;
+        bdBtn.colors = MakeColorBlock(new Color(0,0,0,0), new Color(0,0,0,0.08f), new Color(0,0,0,0.15f));
+        bdBtn.onClick.AddListener(CloseInteriorOverlay);
+
+        // ── Modal panel ────────────────────────────────────────────────────────
+        GameObject modal = MakePanel(interiorOverlayRoot.transform, PanelBg);
+        RectTransform mr = modal.GetComponent<RectTransform>();
+        mr.anchorMin       = new Vector2(0.5f, 0.5f);
+        mr.anchorMax       = new Vector2(0.5f, 0.5f);
+        mr.pivot           = new Vector2(0.5f, 0.5f);
+        mr.sizeDelta       = new Vector2(modalW, modalH);
+        mr.anchoredPosition = Vector2.zero;
+
+        // Stop backdrop clicks from passing through the modal.
+        modal.GetComponent<Image>().raycastTarget = true;
+
+        // ── Title bar ──────────────────────────────────────────────────────────
+        GameObject titleBar = MakePanel(modal.transform, new Color(0.07f, 0.07f, 0.09f, 1f));
+        RectTransform tbr = titleBar.GetComponent<RectTransform>();
+        tbr.anchorMin = new Vector2(0f, 1f);
+        tbr.anchorMax = new Vector2(1f, 1f);
+        tbr.pivot     = new Vector2(0.5f, 1f);
+        tbr.offsetMin = new Vector2(0f, -titleH);
+        tbr.offsetMax = Vector2.zero;
+
+        GameObject titleGo = MakeText(titleBar.transform, building.InteriorDisplayName,
+            15, TextAnchor.MiddleLeft, White);
+        RectTransform ttr = titleGo.GetComponent<RectTransform>();
+        ttr.anchorMin = Vector2.zero;
+        ttr.anchorMax = Vector2.one;
+        ttr.offsetMin = new Vector2(14f, 0f);
+        ttr.offsetMax = new Vector2(-50f, 0f);
+
+        GameObject closeBtn = MakeSimpleButton(titleBar.transform, "X", 14, CloseInteriorOverlay);
+        RectTransform cr = closeBtn.GetComponent<RectTransform>();
+        cr.anchorMin       = new Vector2(1f, 0.5f);
+        cr.anchorMax       = new Vector2(1f, 0.5f);
+        cr.pivot           = new Vector2(1f, 0.5f);
+        cr.sizeDelta       = new Vector2(36f, 28f);
+        cr.anchoredPosition = new Vector2(-8f, 0f);
+
+        // ── Interior content area ──────────────────────────────────────────────
+        float contentAreaH = modalH - titleH - statusH - padding * 2f;
+
+        GameObject contentArea = new GameObject("InteriorContent");
+        contentArea.transform.SetParent(modal.transform, false);
+        RectTransform car = contentArea.AddComponent<RectTransform>();
+        car.anchorMin = new Vector2(0f, 0f);
+        car.anchorMax = new Vector2(1f, 1f);
+        car.offsetMin = new Vector2(padding, statusH + padding);
+        car.offsetMax = new Vector2(-padding, -titleH);
+
+        // ── Zone panels ────────────────────────────────────────────────────────
+        // Kitchen  – left 33%, top 58%
+        interiorKitchenZone  = CreateZone(contentArea.transform, "KITCHEN",
+            0f, 0.42f, 0.33f, 1f, new Color(0.17f, 0.10f, 0.06f));
+
+        // Counter  – mid 33%, top 30%
+        interiorCounterZone  = CreateZone(contentArea.transform, "COUNTER",
+            0.33f, 0.70f, 0.66f, 1f, new Color(0.24f, 0.16f, 0.10f));
+
+        // Queue    – right 67%, mid strip
+        interiorQueueZone    = CreateZone(contentArea.transform, "QUEUE  →",
+            0.33f, 0.42f, 1f, 0.70f, new Color(0.96f, 0.91f, 0.78f),
+            labelColor: new Color(0.2f, 0.2f, 0.2f));
+
+        // Seating  – full width, bottom 42%
+        interiorSeatingZone  = CreateZone(contentArea.transform, "SEATING",
+            0f, 0f, 1f, 0.42f, new Color(0.99f, 0.95f, 0.88f),
+            labelColor: new Color(0.2f, 0.2f, 0.2f));
+
+        // ── Status bar ─────────────────────────────────────────────────────────
+        GameObject statusBar = MakePanel(modal.transform, new Color(0.07f, 0.07f, 0.09f, 1f));
+        RectTransform sbr = statusBar.GetComponent<RectTransform>();
+        sbr.anchorMin = new Vector2(0f, 0f);
+        sbr.anchorMax = new Vector2(1f, 0f);
+        sbr.pivot     = new Vector2(0.5f, 0f);
+        sbr.offsetMin = Vector2.zero;
+        sbr.offsetMax = new Vector2(0f, statusH);
+
+        MakeText(statusBar.transform, "", 11, TextAnchor.MiddleCenter, new Color(0.7f, 0.7f, 0.7f));
+
+        // ── Legend ─────────────────────────────────────────────────────────────
+        BuildInteriorLegend(statusBar.transform);
+    }
+
+    RectTransform CreateZone(Transform parent, string label,
+        float ancMinX, float ancMinY, float ancMaxX, float ancMaxY,
+        Color bgColor, Color? labelColor = null)
+    {
+        GameObject zone = new GameObject(label + "_zone");
+        zone.transform.SetParent(parent, false);
+
+        Image img   = zone.AddComponent<Image>();
+        img.color   = bgColor;
+
+        RectTransform r = zone.GetComponent<RectTransform>();
+        r.anchorMin = new Vector2(ancMinX, ancMinY);
+        r.anchorMax = new Vector2(ancMaxX, ancMaxY);
+        r.offsetMin = new Vector2(2f,  2f);
+        r.offsetMax = new Vector2(-2f, -2f);
+
+        // Zone label
+        GameObject lgo = MakeText(zone.transform, label, 9, TextAnchor.UpperLeft,
+            labelColor ?? new Color(0.8f, 0.7f, 0.6f));
+        RectTransform lr = lgo.GetComponent<RectTransform>();
+        lr.anchorMin = Vector2.zero;
+        lr.anchorMax = Vector2.one;
+        lr.offsetMin = new Vector2(4f, 4f);
+        lr.offsetMax = new Vector2(-4f, -4f);
+
+        return r;
+    }
+
+    void BuildInteriorLegend(Transform parent)
+    {
+        // Tiny colour key: ■ Worker  ■ Queuing  ■ Eating
+        (Color col, string lbl)[] entries = {
+            (DotWorker, "Worker"),
+            (DotQueue,  "Queuing"),
+            (DotEating, "Eating"),
+        };
+
+        float startX = 14f;
+        float stepX  = 110f;
+
+        for (int i = 0; i < entries.Length; i++)
+        {
+            float x = startX + i * stepX;
+
+            // Colour swatch
+            GameObject swatch = new GameObject("Swatch");
+            swatch.transform.SetParent(parent, false);
+            swatch.AddComponent<Image>().color = entries[i].col;
+            RectTransform sr = swatch.GetComponent<RectTransform>();
+            sr.anchorMin       = new Vector2(0f, 0.5f);
+            sr.anchorMax       = new Vector2(0f, 0.5f);
+            sr.pivot           = new Vector2(0f, 0.5f);
+            sr.sizeDelta       = new Vector2(12f, 12f);
+            sr.anchoredPosition = new Vector2(x, 0f);
+
+            // Label
+            GameObject lgo = MakeText(parent, entries[i].lbl, 10, TextAnchor.MiddleLeft,
+                new Color(0.75f, 0.75f, 0.75f));
+            RectTransform lr = lgo.GetComponent<RectTransform>();
+            lr.anchorMin       = new Vector2(0f, 0f);
+            lr.anchorMax       = new Vector2(0f, 1f);
+            lr.pivot           = new Vector2(0f, 0.5f);
+            lr.sizeDelta       = new Vector2(80f, 0f);
+            lr.anchoredPosition = new Vector2(x + 16f, 0f);
+        }
+    }
+
+    IEnumerator InteriorRefreshLoop(IHasInteriorView building)
+    {
+        while (interiorOverlayRoot != null)
+        {
+            UpdateInteriorAgents(building);
+            yield return new WaitForSeconds(0.5f);
+        }
+    }
+
+    void UpdateInteriorAgents(IHasInteriorView building)
+    {
+        if (interiorOverlayRoot == null) return;
+
+        List<InteriorAgentInfo> agents = building.GetInteriorAgentInfo();
+
+        // Build a set of current agent names for diff.
+        var currentNames = new HashSet<string>();
+        foreach (var info in agents)
+            currentNames.Add(info.name);
+
+        // Remove dots for agents who have left.
+        var toRemove = new List<string>();
+        foreach (var kv in interiorDots)
+            if (!currentNames.Contains(kv.Key)) toRemove.Add(kv.Key);
+        foreach (var key in toRemove)
+        {
+            if (interiorDots[key] != null) Destroy(interiorDots[key]);
+            interiorDots.Remove(key);
+        }
+
+        // Tally slots used per zone so we can assign positions.
+        var slotIndex = new Dictionary<InteriorZone, int>
+        {
+            { InteriorZone.Kitchen, 0 },
+            { InteriorZone.Counter, 0 },
+            { InteriorZone.Queue,   0 },
+            { InteriorZone.Seating, 0 },
+        };
+
+        foreach (var info in agents)
+        {
+            RectTransform zoneRT = ZoneRect(info.zone);
+            if (zoneRT == null) continue;
+
+            int idx = slotIndex[info.zone];
+            Vector2[] slots = SlotsForZone(info.zone);
+            if (idx >= slots.Length) continue;
+            slotIndex[info.zone]++;
+
+            Color dotColor = info.isWorker ? DotWorker
+                           : info.zone == InteriorZone.Seating ? DotEating
+                           : DotQueue;
+
+            if (!interiorDots.TryGetValue(info.name, out GameObject dot) || dot == null)
+            {
+                dot = CreateAgentDot(zoneRT, info.name, dotColor);
+                interiorDots[info.name] = dot;
+            }
+
+            // Reparent to correct zone if changed.
+            if (dot.transform.parent != zoneRT)
+                dot.transform.SetParent(zoneRT, false);
+
+            // Update colour (Image lives on the "Dot" child, not the root).
+            Image dotImg = dot.GetComponentInChildren<Image>();
+            if (dotImg != null) dotImg.color = dotColor;
+
+            // Position within zone using normalised slot coordinates.
+            RectTransform dr = dot.GetComponent<RectTransform>();
+            Rect zoneRect = zoneRT.rect;
+            dr.anchoredPosition = new Vector2(
+                (slots[idx].x - 0.5f) * zoneRect.width,
+                (slots[idx].y - 0.5f) * zoneRect.height
+            );
+        }
+    }
+
+    GameObject CreateAgentDot(RectTransform zone, string agentName, Color color)
+    {
+        const float dotSize  = 26f;
+        const float labelH   = 14f;
+
+        GameObject root = new GameObject(agentName + "_dot");
+        root.AddComponent<RectTransform>();   // must be added before parenting into Canvas
+        root.transform.SetParent(zone, false);
+
+        // Coloured square
+        GameObject square = new GameObject("Dot");
+        square.transform.SetParent(root.transform, false);
+        Image img = square.AddComponent<Image>();
+        img.color = color;
+        RectTransform ir = square.GetComponent<RectTransform>();
+        ir.anchorMin       = new Vector2(0.5f, 0.5f);
+        ir.anchorMax       = new Vector2(0.5f, 0.5f);
+        ir.pivot           = new Vector2(0.5f, 0.5f);
+        ir.sizeDelta       = new Vector2(dotSize, dotSize);
+        ir.anchoredPosition = new Vector2(0f, labelH * 0.5f);
+
+        // Name label — white works on dark zones; on light zones the dot colour above gives enough context.
+        string firstName = agentName.Contains(' ') ? agentName.Split(' ')[0] : agentName;
+        GameObject lgo = MakeText(root.transform, firstName, 9, TextAnchor.MiddleCenter, White);
+        RectTransform lr = lgo.GetComponent<RectTransform>();
+        lr.anchorMin       = new Vector2(0.5f, 0.5f);
+        lr.anchorMax       = new Vector2(0.5f, 0.5f);
+        lr.pivot           = new Vector2(0.5f, 0.5f);
+        lr.sizeDelta       = new Vector2(70f, labelH);
+        lr.anchoredPosition = new Vector2(0f, -(dotSize * 0.5f + 1f));
+
+        return root;
+    }
+
+    RectTransform ZoneRect(InteriorZone zone) => zone switch
+    {
+        InteriorZone.Kitchen => interiorKitchenZone,
+        InteriorZone.Counter => interiorCounterZone,
+        InteriorZone.Queue   => interiorQueueZone,
+        InteriorZone.Seating => interiorSeatingZone,
+        _                    => null,
+    };
+
+    static Vector2[] SlotsForZone(InteriorZone zone) => zone switch
+    {
+        InteriorZone.Kitchen => KitchenSlots,
+        InteriorZone.Counter => CounterSlots,
+        InteriorZone.Queue   => QueueSlots,
+        InteriorZone.Seating => SeatingSlots,
+        _                    => System.Array.Empty<Vector2>(),
+    };
 
     // ── RectTransform helpers ─────────────────────────────────────────────────
 

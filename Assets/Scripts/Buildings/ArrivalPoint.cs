@@ -3,5 +3,4 @@
 // and spawn arriving families here.
 public class ArrivalPoint : Building
 {
-    public override bool Interact(Agent agent) => false; // residents don't interact with it directly
 }

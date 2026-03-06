@@ -9,10 +9,10 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 9086735449244237240}
-  - component: {fileID: 7165481461670989126}
   - component: {fileID: 7293063245065535554}
+  - component: {fileID: -5026573932774291447}
   m_Layer: 0
-  m_Name: AgentV2
+  m_Name: AgentV2Prefab
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -27,59 +27,12 @@ Transform:
   m_GameObject: {fileID: 6497771398287247781}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 680.27234, y: 324.43015, z: 0}
-  m_LocalScale: {x: 0.1, y: 0.1, z: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 0.5, y: 0.5, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &7165481461670989126
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6497771398287247781}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 84b49e4bbf2596e4ab13dcd8406beefc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::Agent
-  agentName: 
-  lifeStage: 5
-  ageInYears: 25
-  familyRole: 0
-  isBeingChased: 0
-  chasingTarget: {fileID: 0}
-  officerArrestFine: 0
-  hunger: 0
-  hungerRate: 0.5
-  hungerThreshold: 60
-  loneliness: 0
-  lonelinessRate: 0.2
-  lonelinessThreshold: 60
-  visitDuration: 10
-  visitLonelinessRestored: 70
-  bankBalance: 0
-  currentState: 0
-  homeTile: {x: 0, y: 0, z: 0}
-  hasHome: 0
-  hasJob: 0
-  employer: {fileID: 0}
-  assignedShift:
-    startHour: 8
-    durationHours: 8
-    workersRequired: 1
-    wage: 280
-    payFrequency: 1
-  isEnrolled: 0
-  enrolledSchool: {fileID: 0}
-  moveSpeed: 3
-  eatDuration: 3
-  cookingDuration: 5
-  cookingHungerRestored: 80
-  pantryRestockThreshold: 2
-  homelessLeaveTime: 120
 --- !u!212 &7293063245065535554
 SpriteRenderer:
   serializedVersion: 2
@@ -127,9 +80,9 @@ SpriteRenderer:
   m_GlobalIlluminationMeshLod: 0
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 5
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 7482667652216324306, guid: 48e93eef0688c4a259cb0eddcd8661f7, type: 3}
   m_Color: {r: 0.9105531, g: 0.05900679, b: 0.9622642, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -137,5 +90,18 @@ SpriteRenderer:
   m_Size: {x: 1, y: 1}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 0
+  m_WasSpriteAssigned: 1
   m_SpriteSortPoint: 0
+--- !u!114 &-5026573932774291447
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6497771398287247781}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69af82b6acfda2147b68a8bb91fea02e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AgentV2
+  Name: 

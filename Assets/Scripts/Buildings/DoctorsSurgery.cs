@@ -15,29 +15,6 @@ public class DoctorsSurgery : MedicalBuilding
     public override bool CanTreat(ConditionSeverity severity)
         => severity == ConditionSeverity.Mild;
 
-    // ── V1 Agent overloads ─────────────────────────────────────────────────────
-    public override bool TryAdmit(Agent agent)
-    {
-        if (!IsOpen() || TotalPatients >= maxPatients) return false;
-        currentPatients.Add(agent);
-        return true;
-    }
-
-    public override void DischargePatient(Agent agent)
-    {
-        currentPatients.Remove(agent);
-    }
-
-    public override void TreatPatient(Agent agent)
-    {
-        agent.TreatConditions(ConditionSeverity.Mild);
-        if (agent.TrySpend(consultationFee))
-            treasury += consultationFee;
-        EventLog.Log($"{agent.agentName} was treated at {buildingName}.");
-        Debug.Log($"{agent.agentName} treated at {buildingName}. Fee: ${consultationFee}");
-    }
-
-    // ── V2 AgentV2 overloads ───────────────────────────────────────────────────
     public override bool TryAdmit(AgentV2 agent)
     {
         if (!IsOpen() || TotalPatients >= maxPatients) return false;
@@ -76,7 +53,5 @@ public class DoctorsSurgery : MedicalBuilding
         });
     }
 
-    public override bool Interact(Agent agent) => false; // patients admitted via TryAdmit
-
-    private int TotalPatients => currentPatients.Count + currentPatientsV2.Count;
+    private int TotalPatients => currentPatientsV2.Count;
 }

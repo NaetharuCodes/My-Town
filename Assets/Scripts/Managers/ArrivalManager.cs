@@ -13,10 +13,6 @@ public class ArrivalManager : MonoBehaviour
     public AgentManager agentManager;
     public BuildingManager buildingManager;
 
-    [Header("Agent Version")]
-    [Tooltip("When true, spawns V2 module-based agents instead of the legacy V1 agents.")]
-    public bool useV2Agents = false;
-
     [Header("Arrival Settings")]
     [Tooltip("Chance (0–1) that any families arrive at each transport departure (every 4 game-hours).")]
     public float arrivalChance = 0.65f;
@@ -66,7 +62,7 @@ public class ArrivalManager : MonoBehaviour
         {
             if (hour != dep) continue;
 
-            int pop = useV2Agents ? agentManager.GetAllAgentsV2().Count : agentManager.GetAllAgents().Count;
+            int pop = agentManager.GetAllAgentsV2().Count;
             if (pop >= maxPopulation) return;
             if (Random.value < arrivalChance)
                 SpawnTransport();
@@ -82,7 +78,7 @@ public class ArrivalManager : MonoBehaviour
 
         for (int i = 0; i < familyCount; i++)
         {
-            int pop = useV2Agents ? agentManager.GetAllAgentsV2().Count : agentManager.GetAllAgents().Count;
+            int pop = agentManager.GetAllAgentsV2().Count;
             if (pop + totalPeople >= maxPopulation) break;
             totalPeople += SpawnFamily();
         }
@@ -120,17 +116,9 @@ public class ArrivalManager : MonoBehaviour
 
         // Spawn all members at the arrival tile.
         foreach (var (stage, role) in members)
-        {
-            if (useV2Agents)
-                agentManager.SpawnFamilyMemberV2(spawnTile, family, stage, role, lastName);
-            else
-                agentManager.SpawnFamilyMember(spawnTile, family, stage, role, lastName);
-        }
+            agentManager.SpawnFamilyMemberV2(spawnTile, family, stage, role, lastName);
 
         agentManager.RegisterFamily(family);
-
-        // Find housing for the whole family.
-        AssignHousing(family);
 
         string desc = FamilyDescription(type, members.Count);
         Debug.Log($"ArrivalManager: {desc} arrived — the {lastName} family ({members.Count} members).");
@@ -153,16 +141,8 @@ public class ArrivalManager : MonoBehaviour
     int CountHomeless()
     {
         int count = 0;
-        if (useV2Agents)
-        {
-            foreach (AgentV2 a in agentManager.GetAllAgentsV2())
-                if (a.GetModule<HomeModule>()?.HasHome != true) count++;
-        }
-        else
-        {
-            foreach (Agent a in agentManager.GetAllAgents())
-                if (!a.hasHome) count++;
-        }
+        foreach (AgentV2 a in agentManager.GetAllAgentsV2())
+            if (a.GetModule<HomeModule>()?.HasHome != true) count++;
         return count;
     }
 
@@ -234,33 +214,6 @@ public class ArrivalManager : MonoBehaviour
         if (r < 0.55f) return LifeStage.YoungChild;
         if (r < 0.80f) return LifeStage.OlderChild;
         return LifeStage.Teen;
-    }
-
-    void AssignHousing(Family family)
-    {
-        int adultCount = 0;
-        int childCount = 0;
-        foreach (Agent m in family.members)
-        {
-            if (m.familyRole == FamilyRole.Child) childCount++;
-            else adultCount++;
-        }
-        int bedroomsNeeded = adultCount + Mathf.CeilToInt(childCount / 2f);
-
-        // Search all residential buildings for the best fit.
-        foreach (Vector3Int pos in buildingManager.FindAvailableHomes())
-        {
-            Building b = buildingManager.GetBuildingAt(pos);
-            if (b is not ResidentialBuilding residential) continue;
-
-            DwellingUnit unit = residential.FindBestVacantUnit(bedroomsNeeded);
-            if (unit == null) continue;
-
-            residential.AssignFamily(family, unit);
-            return;
-        }
-
-        Debug.LogWarning($"ArrivalManager: No suitable housing found for the {family.familyName} family.");
     }
 
     static string FamilyDescription(FamilyType type, int count)

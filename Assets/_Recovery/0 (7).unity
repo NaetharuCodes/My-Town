@@ -522,7 +522,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::AgentManager
   buildingsTilemap: {fileID: 1795400129}
   buildingManager: {fileID: 892924912}
-  timeManager: {fileID: 0}
+  timeManager: {fileID: 1086190578}
   agentV2Prefab: {fileID: 6497771398287247781, guid: e25860b9015a4b147ba60449e5981cb7, type: 3}
 --- !u!4 &653497588
 Transform:
@@ -597,51 +597,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 641471266}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &787081128
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 787081129}
-  - component: {fileID: 787081130}
-  m_Layer: 0
-  m_Name: AgentScheduler
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &787081129
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 787081128}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 675.37714, y: 329.48727, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 1149037308}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &787081130
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 787081128}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a0d9f4001824a9440baf3b95bd1d64c2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::AgentScheduler
-  slowTickInterval: 1
 --- !u!1 &892924910
 GameObject:
   m_ObjectHideFlags: 0
@@ -809,7 +764,7 @@ Transform:
   - {fileID: 653497588}
   - {fileID: 1996724331}
   - {fileID: 2131429556}
-  - {fileID: 787081129}
+  - {fileID: 1975949726}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1365668947
@@ -1440,6 +1395,51 @@ RectTransform:
   m_AnchoredPosition: {x: 966.49994, y: 540}
   m_SizeDelta: {x: 1925, y: 1072}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!1 &1975949725
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1975949726}
+  - component: {fileID: 1975949727}
+  m_Layer: 0
+  m_Name: AgentScheduler
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1975949726
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1975949725}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 675.37714, y: 329.48727, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1149037308}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1975949727
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1975949725}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a0d9f4001824a9440baf3b95bd1d64c2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AgentScheduler
+  slowTickInterval: 1
 --- !u!1 &1996724330
 GameObject:
   m_ObjectHideFlags: 0

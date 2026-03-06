@@ -59,24 +59,9 @@ public class FireStation : CommercialBuilding
         Debug.Log($"{buildingName} received ${dailyMunicipalBudget} municipal budget. Treasury: ${treasury}");
     }
 
-    // Find any on-duty firefighter not already responding and send them to the burning building.
+    // TODO: V2 fire dispatch — send an on-duty V2 firefighter to respond.
     public void DispatchFirefighter(Building burningBuilding)
     {
-        foreach (var shift in shifts)
-        {
-            foreach (var worker in shift.PresentWorkers)
-            {
-                if (worker.currentState != AgentState.RespondingToFire &&
-                    worker.currentState != AgentState.Extinguishing)
-                {
-                    worker.AssignFireResponse(burningBuilding);
-                    Debug.Log($"{buildingName} dispatched {worker.agentName} to fire at {burningBuilding.buildingName}!");
-                    return;
-                }
-            }
-        }
-        Debug.Log($"No available firefighters at {buildingName} to respond to fire at {burningBuilding.buildingName}!");
+        Debug.Log($"Fire at {burningBuilding.buildingName} — V2 firefighter dispatch not yet implemented.");
     }
-
-    public override bool Interact(Agent agent) => false;
 }
